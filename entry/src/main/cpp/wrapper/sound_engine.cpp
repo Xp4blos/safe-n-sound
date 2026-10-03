@@ -102,7 +102,9 @@ LearnResult SoundEngine::Train(const std::string& label, const std::vector<ambie
                                const SoundProfile& profile, bool registerSound) {
     LearnResult r;
     try {
-        ambient::TrainResult tr = ambient::train_custom_sound(cfg_, label, recordings);
+        ambient::TrainOptions options;
+        options.default_threshold = matchThreshold_;
+        ambient::TrainResult tr = ambient::train_custom_sound(cfg_, label, recordings, options);
         if (registerSound) detector_.add_custom_sound(tr.sound);
         r.templateBytes = ambient::serialize(tr.sound);
         r.consistency = tr.consistency;

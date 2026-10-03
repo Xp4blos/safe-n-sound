@@ -1,7 +1,9 @@
 // "I've heard this sound before. Do you want to name it?" with the three choices of the spec.
 @CustomDialog
 export struct PromptDialog {
-  controller?: CustomDialogController;
+  controller?: CustomDialogController; // required by the compiler; not reliably set for dialogs built in methods
+  // Closes the dialog. The page passes this in explicitly because the controller above can be undefined.
+  onClose: () => void = (): void => {};
   onNameIt: () => void = (): void => {};
   onNotNow: () => void = (): void => {};
   onNever: () => void = (): void => {};
@@ -17,7 +19,7 @@ export struct PromptDialog {
         .linearGradient({ angle: 90, colors: [[$r('app.color.accent'), 0], [$r('app.color.accent_end'), 1]] })
         .fontColor($r('app.color.on_accent'))
         .onClick((): void => {
-          this.controller?.close();
+          this.onClose();
           this.onNameIt();
         })
       Button($r('app.string.prompt_later'), { type: ButtonType.Capsule })
@@ -26,7 +28,7 @@ export struct PromptDialog {
         .backgroundColor($r('app.color.surface_alt'))
         .fontColor($r('app.color.accent'))
         .onClick((): void => {
-          this.controller?.close();
+          this.onClose();
           this.onNotNow();
         })
       Button($r('app.string.prompt_never'), { type: ButtonType.Capsule })
@@ -35,7 +37,7 @@ export struct PromptDialog {
         .backgroundColor(Color.Transparent)
         .fontColor($r('app.color.muted'))
         .onClick((): void => {
-          this.controller?.close();
+          this.onClose();
           this.onNever();
         })
     }

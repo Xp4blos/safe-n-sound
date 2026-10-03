@@ -14,7 +14,9 @@ function clockTime(ms: number): string {
 // Details of one sound: plain-words summary, pattern, name field, alert switch, delete.
 @CustomDialog
 export struct SoundDetailDialog {
-  controller?: CustomDialogController;
+  controller?: CustomDialogController; // required by the compiler; not reliably set for dialogs built in methods
+  // Closes the dialog. The page passes this in explicitly because the controller above can be undefined.
+  onClose: () => void = (): void => {};
   record: SoundRecord | undefined = undefined;
   onSave: (id: number, name: string, alertsEnabled: boolean) => void =
     (id: number, name: string, alertsEnabled: boolean): void => {};
@@ -73,7 +75,7 @@ export struct SoundDetailDialog {
           .backgroundColor($r('app.color.surface_alt'))
           .fontColor($r('app.color.accent'))
           .onClick((): void => {
-            this.controller?.close();
+            this.onClose();
           })
         Button($r('app.string.btn_save'), { type: ButtonType.Capsule })
           .height(50)
@@ -84,7 +86,7 @@ export struct SoundDetailDialog {
             if (this.record !== undefined) {
               this.onSave(this.record.id, this.draftName, this.draftAlerts);
             }
-            this.controller?.close();
+            this.onClose();
           })
       }
       .width('100%')
@@ -103,7 +105,7 @@ export struct SoundDetailDialog {
           if (this.record !== undefined) {
             this.onDelete(this.record.id);
           }
-          this.controller?.close();
+          this.onClose();
         })
     }
     .padding(24)

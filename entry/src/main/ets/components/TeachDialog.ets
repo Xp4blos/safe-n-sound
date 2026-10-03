@@ -10,7 +10,9 @@ const MIN_GOOD_TAKES: number = 2;
 // Teach a sound on purpose: record up to 3 takes (each is checked on the spot), type a name, save.
 @CustomDialog
 export struct TeachDialog {
-  controller?: CustomDialogController;
+  controller?: CustomDialogController; // required by the compiler; not reliably set for dialogs built in methods
+  // Closes the dialog. The page passes this in explicitly because the controller above can be undefined.
+  onClose: () => void = (): void => {};
   recordTake: () => Promise<TakeStatus> = (): Promise<TakeStatus> => {
     const s: TakeStatus = { ok: false, message: 'Unavailable.' };
     return Promise.resolve(s);
@@ -50,7 +52,7 @@ export struct TeachDialog {
     const problem = await this.saveSound(this.name);
     this.saving = false;
     if (problem === '') {
-      this.controller?.close();
+      this.onClose();
       return;
     }
     this.error = problem;
@@ -122,7 +124,7 @@ export struct TeachDialog {
           .backgroundColor($r('app.color.surface_alt'))
           .fontColor($r('app.color.accent'))
           .onClick((): void => {
-            this.controller?.close();
+            this.onClose();
           })
         Button($r('app.string.teach_save'), { type: ButtonType.Capsule })
           .height(50)

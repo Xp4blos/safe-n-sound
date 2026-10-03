@@ -31,14 +31,14 @@ The user owns the decisions recorded here. Unresolved fields may remain blank; d
 ## Acceptance checks
 
 - [ ] The live view moves with room sound (verified on the phone)
-- [ ] A real beep or doorbell appears in History as "Unknown sound"
-- [ ] Playing it again shows the naming prompt; naming it works
+- [x] A real beep or doorbell appears in History as "Unknown sound" (verified on the phone, see demo video)
+- [x] Playing it again shows the naming prompt; naming it works (verified)
 - [ ] A third time vibrates, notifies "<Name> detected" and counts on the same entry
 - [ ] A taught sound alerts under its own name and is not confused with the first
 - [ ] Room hum, speech and the phone's own vibration create no entries
 - [ ] Named sounds are still there after restarting the app
 
-Only the first check has been confirmed on a phone so far.
+Verified on the phone: the live view, the "Unknown sound" entry, the naming prompt and naming, and the alert card with the count of 3 on the same entry. Not visually confirmed: vibration and the system notification. Not yet checked: a second taught sound, hum/speech/vibration creating no entries over a long time, restart persistence.
 
 ## Scope boundaries
 

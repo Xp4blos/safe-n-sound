@@ -1,5 +1,6 @@
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import { audio } from '@kit.AudioKit';
+import { fileIo as fs } from '@kit.CoreFileKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { LearnOutcome } from '../model/SoundModels';
 import { AlertService } from './AlertService';
@@ -11,6 +12,10 @@ const LOG_DOMAIN: number = 0x3201;
 const TAG: string = 'AudioService';
 const SAMPLE_RATE: number = 16000;
 const MIC_PERMISSION: Permissions = 'ohos.permission.MICROPHONE';
+
+// Developer switch: write the captured audio to <app files>/debug_capture.pcm (16 kHz mono 16-bit) so real recordings
+// can be replayed through the engine on a PC. Off by default; the audio never leaves the phone otherwise.
+const DEBUG_CAPTURE_AUDIO: boolean = false;
 
 export type ListenState = 'idle' | 'starting' | 'listening' | 'permission_denied' | 'error';
 
@@ -28,6 +33,7 @@ export class AudioService {
   private capturer: audio.AudioCapturer | undefined;
   private engine: NativeEngine | undefined;
   private pipeline: SoundPipeline | undefined;
+  private debugFd: number = -1;
   private session: number = 0; // bumped by every start and stop so a start can tell it was cancelled
 
   // Recording a take for teaching: audio is collected here instead of being analysed for events.
@@ -70,6 +76,10 @@ export class AudioService {
         }
       }
       this.pipeline = new SoundPipeline(this.store.catalog(), engine, this.alerts, this.store, this.listener);
+      if (DEBUG_CAPTURE_AUDIO) {
+        this.debugFd = fs.openSync(context.filesDir + '/debug_capture.pcm',
+          fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC).fd;
+      }
       const options: audio.AudioCapturerOptions = {
         streamInfo: {
           samplingRate: audio.AudioSamplingRate.SAMPLE_RATE_16000,
@@ -175,6 +185,10 @@ export class AudioService {
     this.engine = undefined;
     this.pipeline = undefined;
     this.abortTake('Listening stopped.');
+    if (this.debugFd >= 0) {
+      fs.closeSync(this.debugFd);
+      this.debugFd = -1;
+    }
     if (capturer !== undefined) {
       try {
         capturer.off('readData');
@@ -231,6 +245,9 @@ export class AudioService {
       return;
     }
     try {
+      if (this.debugFd >= 0) {
+        fs.writeSync(this.debugFd, buffer);
+      }
       const result = engine.process(buffer);
       this.onLevel(result.levelDb);
       this.onSpectrum(result.bands);

@@ -22,3 +22,6 @@ foreach(t test_core test_custom test_safety)
 endforeach()
 add_executable(wav_cli ../ambient/tools/wav_cli.cpp)
 target_link_libraries(wav_cli PRIVATE ambient_core)
+
+add_executable(replay_cli ../tools/replay_cli.cpp)
+target_link_libraries(replay_cli PRIVATE sns_wrapper)

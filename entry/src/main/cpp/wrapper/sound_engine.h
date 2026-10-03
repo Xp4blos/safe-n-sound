@@ -16,6 +16,8 @@ constexpr int kLiveBands = 16;               // bars of the live spectrum, log-s
 constexpr double kRingSeconds = 10.0;        // audio kept in memory for learning (never stored)
 constexpr double kLearnBeforeSec = 2.0;      // learning window: from this long before the alarm event ...
 constexpr double kLearnAfterSec = 3.5;       // ... to this long after it
+constexpr float kLearnedMatchThreshold = 0.60f;  // similarity needed to recognise a learned sound again
+                                                 // (the engine default 0.8 and 0.7 missed quieter real repeats on a phone)
 
 // Only "alarm" (a sustained narrow-band tone) and "custom" (a learned or taught sound recognised again).
 struct EngineEvent {
@@ -64,6 +66,9 @@ public:
     bool AddSound(const std::vector<uint8_t>& bytes, std::string* error);
     bool RemoveSound(const std::string& label);
 
+    // Similarity needed to recognise sounds learned or taught from now on (default kLearnedMatchThreshold).
+    void SetMatchThreshold(float threshold) { matchThreshold_ = threshold; }
+
 private:
     void AppendRing(const int16_t* pcm, size_t n);
     void UpdateLiveBands(const int16_t* pcm, size_t n);
@@ -78,6 +83,7 @@ private:
     uint64_t ringStart_ = 0;  // absolute sample index of ring_[0]
     uint64_t total_ = 0;      // samples received so far
     std::vector<int16_t> bandPending_;
+    float matchThreshold_ = kLearnedMatchThreshold;
     float levelDb_ = -100.0f;
     std::array<float, kLiveBands> bands_{};
 };

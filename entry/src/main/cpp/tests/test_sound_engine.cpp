@@ -176,3 +176,15 @@ TEST(engine_live_bands_follow_the_sound) {
     const auto q = quiet.Process(silence.data(), silence.size());
     for (float v : q.bands) CHECK(v < 0.05f);
 }
+
+TEST(engine_same_rhythm_at_another_pitch_is_not_the_learned_sound) {
+    sns::SoundEngine engine(sns::kSampleRate);
+    const auto first = Feed(engine, Take(BeepTrain(3000, 0.6, 0.3, 3, 0.3), 71, 4.0));
+    CHECK(Count(first, "alarm") >= 1);
+    if (first.empty()) return;
+    CHECK(engine.LearnFromRing("snd-1", first[0].timeSec).ok);
+    const auto other = Feed(engine, Take(BeepTrain(1500, 0.6, 0.3, 3, 0.3), 72, 4.0));
+    CHECK(Count(other, "custom") == 0);
+    const auto same = Feed(engine, Take(BeepTrain(3000, 0.6, 0.3, 3, 0.2), 73, 4.0));  // quieter repeat
+    CHECK(Count(same, "custom") == 1);
+}

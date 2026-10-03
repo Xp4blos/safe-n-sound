@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HistoryTab } from '../components/HistoryTab';
 import { ListenTab } from '../components/ListenTab';
 import { MySoundsTab } from '../components/MySoundsTab';
@@ -13,6 +14,8 @@ import { PipelineListener } from '../services/SoundPipeline';
 import { ServiceHub } from '../services/ServiceHub';
 import { SoundStore } from '../services/SoundStore';
 
+const LOG_DOMAIN: number = 0x3201;
+const TAG: string = 'IndexPage';
 const TAKE_SECONDS: number = 6;
 const ALERT_CARD_MS: number = 60000;
 const UI_REFRESH_MS: number = 120;
@@ -96,6 +99,7 @@ struct Index {
       this.refreshSounds();
     };
     bridge.alert = (record: SoundRecord, timeMs: number): void => {
+      hilog.info(LOG_DOMAIN, TAG, 'ALERT card id=%{public}d name=%{public}s', record.id, record.name);
       this.alertRecord = copyRecord(record);
       const token = ++this.alertToken;
       setTimeout((): void => {
@@ -170,15 +174,20 @@ struct Index {
   // ---- naming, details, deleting ----------------------------------------------------------------
 
   private openDetail(id: number): void {
+    hilog.info(LOG_DOMAIN, TAG, 'DIALOG detail open id=%{public}d', id);
     const store = this.store;
     const record = store === undefined ? undefined : store.catalog().find(id);
     if (record === undefined) {
       return;
     }
     const snapshot = copyRecord(record);
-    const controller: CustomDialogController = new CustomDialogController({
+    let dialog: CustomDialogController | undefined = undefined;
+    dialog = new CustomDialogController({
       builder: SoundDetailDialog({
         record: snapshot,
+        onClose: (): void => {
+          dialog?.close();
+        },
         onSave: (soundId: number, name: string, alertsEnabled: boolean): void => {
           this.saveDetail(soundId, name, alertsEnabled);
         },
@@ -189,10 +198,11 @@ struct Index {
       alignment: DialogAlignment.Center,
       customStyle: true
     });
-    controller.open();
+    dialog.open();
   }
 
   private async saveDetail(id: number, name: string, alertsEnabled: boolean): Promise<void> {
+    hilog.info(LOG_DOMAIN, TAG, 'DIALOG detail save id=%{public}d name=%{public}s', id, name);
     const store = this.store;
     if (store === undefined) {
       return;
@@ -234,9 +244,14 @@ struct Index {
 
   // "I've heard this sound before. Do you want to name it?"
   private openPrompt(record: SoundRecord): void {
+    hilog.info(LOG_DOMAIN, TAG, 'DIALOG prompt open id=%{public}d name=%{public}s', record.id, record.name);
     const id = record.id;
-    const controller: CustomDialogController = new CustomDialogController({
+    let dialog: CustomDialogController | undefined = undefined;
+    dialog = new CustomDialogController({
       builder: PromptDialog({
+        onClose: (): void => {
+          dialog?.close();
+        },
         onNameIt: (): void => {
           this.openDetail(id);
         },
@@ -248,7 +263,7 @@ struct Index {
       alignment: DialogAlignment.Center,
       customStyle: true
     });
-    controller.open();
+    dialog.open();
   }
 
   private async neverAsk(id: number): Promise<void> {
@@ -274,8 +289,12 @@ struct Index {
       return;
     }
     this.takeBuffers = [];
-    const controller: CustomDialogController = new CustomDialogController({
+    let dialog: CustomDialogController | undefined = undefined;
+    dialog = new CustomDialogController({
       builder: TeachDialog({
+        onClose: (): void => {
+          dialog?.close();
+        },
         recordTake: (): Promise<TakeStatus> => this.recordTake(),
         saveSound: (name: string): Promise<string> => this.saveTaught(name),
         discardTakes: (): void => {
@@ -286,7 +305,7 @@ struct Index {
       customStyle: true,
       autoCancel: false
     });
-    controller.open();
+    dialog.open();
   }
 
   private async recordTake(): Promise<TakeStatus> {

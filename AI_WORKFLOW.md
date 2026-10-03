@@ -41,6 +41,8 @@ No MCP server was used for the product work.
 | 2026-10-03 | Claude Sonnet 5.5 | Check the teammate's engine, then integrate it | vendored engine, `SoundEngine` wrapper, `SoundProfile`, new NAPI API | Built with warnings as errors; the engine's 7 test targets plus 12 wrapper and 6 profile tests pass; compared on hum, motor and beep files |
 | 2026-10-03 | Claude Sonnet 5.5 | Functional spec F1-F9 in the app | catalog, pipeline, services, Listen/History/My sounds, teach, prompt and detail dialogs | 36 ArkTS unit tests; `.hap` builds; lint 0 errors; start, spectrum, teach recording and stop exercised on the phone |
 
+| 2026-10-03 | Claude Sonnet 5.5 | Modern UI, signed .hap, GitHub repo and release, demo video | restyled components, `scripts/make-signed-hap.sh`, release v1.0.0, `dist/safe-n-sound-demo.mp4` | Video recorded by driving the phone with `hdc`/`uitest` while a real alarm was played from a PC speaker; fixes found while recording |
+
 ## Workflow
 
 ### Ideation and architecture
@@ -64,6 +66,10 @@ Work followed written plans, task by task and test first, with small commits on 
 - A fixed -60 dB noise floor made room hum one endless event; the phone's own vibration was heard by its microphone and re-detected as new sounds. The first engine was replaced by the teammate's engine, which restricts alarms to 800-4500 Hz and ignores steady background.
 - The level chart did not redraw because the list keys ignored the values.
 - hilog domain `0x0000` produced no output on the test phone; domain `0x3201` is used.
+- Recording the demo showed that the dialog buttons (Cancel, Save, Name it) did not close their dialogs: the framework does not set the `controller` of a custom dialog built inside a method (it was `undefined`). Fixed by passing an explicit `onClose` callback to each dialog.
+- While the demo was recorded with a fast screenshot loop on the phone, repeats of the alarm were no longer recognised, although the same sound was recognised without that load; the audio stream is disturbed by heavy load on the phone. The same recording replayed on the PC gave the same result as the phone, which is how this was separated from a threshold problem. The capture was made lighter (half-size screenshots, no UI polling while a sound is analysed).
+- The engine's default similarity threshold (0.8) missed quieter repeats on real audio; it is 0.6 for learned sounds, checked on a real recording and on host tests that a different pitch is still not matched.
+- The "Doorbell detected" card was below the fold of the Listen tab, so it was moved to the top.
 
 ## Unsuccessful approaches
 
@@ -73,7 +79,7 @@ Work followed written plans, task by task and test first, with small commits on 
 
 ## Known limitations
 
-- Not exercised on the phone by the agent: detection and matching of a real beep or doorbell, the "I've heard this sound before" prompt, naming, the named alert (vibration and notification), a successful teach with real sound, restart persistence of named sounds, and the denied-permission Settings path. The functional specification's acceptance steps 2-5 and 7 therefore need the manual test described in the README.
+- Verified on the phone with a real alarm sound (PC speaker): detection, the "Unknown sound" entry, recognition of the repeat, the "I've heard this sound before" prompt, naming, the "Doorbell detected" card and the count of 3 in History (see the demo video and the logs). Not confirmed visually: the vibration pattern (cannot be filmed) and the system notification (published without errors, but not seen). Not exercised: a successful teach with real sound, restart persistence of named sounds (data survived reinstalls in testing but was not checked after a plain restart), the denied-permission Settings path, and a second, different sound that must not be confused with the first (covered only by a host test with generated audio).
 - Detection thresholds come from the teammate's engine and were checked on generated and few real sounds; sounds shorter than 0.4 s or outside 800-4500 Hz are not detected automatically (Teach covers them).
 - Foreground listening only; keyword detection and knock/loud-sound classes are not in the app.
 - English UI only.

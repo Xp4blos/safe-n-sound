@@ -101,6 +101,17 @@ On first start the app asks for notification permission and the microphone permi
 explanation). If you deny the microphone, the Listen tab explains why it is needed and the next try opens the
 system Settings page.
 
+## Engine checks on real audio
+
+`build-host	ests\wav_cli.exe file.wav` (built by `scripts\host-tests.cmd`) runs the team's detector on a WAV file, and
+`build-host	ests
+eplay_cli.exe recording.wav [threshold]` replays a recording through the same `SoundEngine` the app
+uses: it learns the first alarm and prints every alarm and every recognition. To record audio on the phone, set
+`DEBUG_CAPTURE_AUDIO` to `true` in `entry/src/main/ets/services/AudioService.ets`; the app then writes
+`debug_capture.pcm` (16 kHz mono 16-bit) into its files folder, which can be pulled with `hdc file recv`.
+`entry/src/main/cpp/tests/data/phone_alarm_3x.wav` is such a recording (three plays of an alarm in a noisy room) and a
+unit test checks that the first play is learned and the other two are recognised.
+
 ## Signed .hap
 
 A signed package is what a device or emulator accepts. It is produced like this (the signing data stays on the
@@ -143,10 +154,19 @@ phone's microphone in a quiet room; search the web for "smoke detector beep", "m
    History shows the same entry with count 3.
 5. For a sound shorter than 0.4 s, use **Teach a sound** on the Listen tab instead.
 
+## Demo video
+
+A 95-second demo recorded on the test phone (screen frames captured with `hdc`, a real alarm sound played from a PC
+speaker next to the phone): start listening with the microphone permission, a sound is detected and appears in
+History as "Unknown sound", the same sound again triggers "I've heard this sound before", it is named "Doorbell",
+and the third time the "Doorbell detected" card appears. The phone's vibration cannot be filmed. The video is attached
+to the GitHub release: https://github.com/Xp4blos/safe-n-sound/releases/tag/v1.0.0 (`safe-n-sound-demo.mp4`).
+
 ## Known limitations
 
 - Listening stops when the app goes to the background or the screen locks (foreground only).
-- Detection thresholds come from the team's engine and were tuned on few sounds; sounds shorter than 0.4 s,
+- Detection thresholds come from the team's engine; the similarity needed to recognise a learned sound again is 0.6
+  (the engine default 0.8 missed quieter real repeats), tuned on recordings of one alarm sound in one noisy room; sounds shorter than 0.4 s,
   very quiet sounds, and sounds outside 800-4500 Hz are not detected automatically (Teach covers them).
 - Knocks and loud sounds are not reported (the phone's own vibration would be classed as one).
 - Keyword detection ("Help!", "Watch out!", "Ratunku!") is roadmap only; the engine contains keyword logic

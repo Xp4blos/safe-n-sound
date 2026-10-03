@@ -169,6 +169,11 @@ export struct ListenTab {
       Column({ space: 18 }) {
         this.header()
 
+        // A named sound was just heard: the card sits at the very top so it is visible without scrolling.
+        if (this.alertRecord !== undefined) {
+          this.alertCard(this.alertRecord)
+        }
+
         SpectrumView({ columns: this.columns, marks: this.marks })
 
         Column({ space: 6 }) {
@@ -221,10 +226,6 @@ export struct ListenTab {
         .onClick((): void => {
           this.onTeach();
         })
-
-        if (this.alertRecord !== undefined) {
-          this.alertCard(this.alertRecord)
-        }
 
         this.lastSoundCard()
 
