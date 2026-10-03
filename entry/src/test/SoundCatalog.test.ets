@@ -1,131 +1,170 @@
 import { describe, it, expect } from '@ohos/hypium';
-import { SoundCatalog, CatalogOutcome } from '../main/ets/model/SoundCatalog';
-import { DetectedEvent, SoundRecord } from '../main/ets/model/SoundModels';
+import { Occurrence, SoundCatalog } from '../main/ets/model/SoundCatalog';
+import { SoundProfile, SoundRecord } from '../main/ets/model/SoundModels';
 
-function fingerprint(seed: number): number[] {
-  const fp: number[] = [];
-  for (let i = 0; i < 29; i++) {
-    fp.push(seed + i / 100);
-  }
-  return fp;
-}
-
-function event(seed: number, startSec: number): DetectedEvent {
-  const ev: DetectedEvent = { startSec: startSec, durationSec: 1, kind: 0, fingerprint: fingerprint(seed) };
-  return ev;
-}
-
-function record(id: number, fp: number[]): SoundRecord {
-  const r: SoundRecord = {
-    id: id, kind: 0, fingerprint: fp, name: '', alertsEnabled: true, timesHeard: 1,
-    lastSeenMs: 1000, lastNotifiedMs: 0, recentMs: [1000]
+function profile(hz: number, repetition: number, beeps: number, rate: number): SoundProfile {
+  const p: SoundProfile = {
+    dominantHz: hz, durationSec: 2.1, beepCount: beeps, beepsPerSec: rate, repetition: repetition,
+    modulation: repetition === 1 ? 1 : 0, envelope: [1, 0.5, 1, 0.5, 1, 0.5, 1, 0.5]
   };
-  return r;
+  return p;
+}
+
+const MIN: number = 60000;
+
+function learnedCatalog(): SoundCatalog {
+  const catalog = new SoundCatalog([]);
+  const pending = catalog.createPending(1000000);
+  catalog.completeLearning(pending.label, 'AAAA', profile(2000, 1, 3, 3));
+  return catalog;
 }
 
 export default function soundCatalogTest() {
   describe('soundCatalog', () => {
-    it('new_events_create_unnamed_records_with_increasing_ids', 0, () => {
+    it('pending_records_get_increasing_ids_and_unique_labels', 0, () => {
       const catalog = new SoundCatalog([]);
-      const first: CatalogOutcome = catalog.registerEvent(event(1, 0), -1, 100000);
-      const second: CatalogOutcome = catalog.registerEvent(event(2, 0), -1, 100500);
-      expect(first.isNew).assertTrue();
-      expect(first.shouldNotify).assertFalse();
-      expect(first.record.id).assertEqual(1);
-      expect(first.record.name).assertEqual('');
-      expect(first.record.alertsEnabled).assertTrue();
-      expect(second.record.id).assertEqual(2);
-      expect(catalog.records().length).assertEqual(2);
+      const a = catalog.createPending(1000);
+      const b = catalog.createPending(2000);
+      expect(a.id).assertEqual(1);
+      expect(b.id).assertEqual(2);
+      expect(a.label).assertEqual('snd-1');
+      expect(b.label).assertEqual('snd-2');
+      expect(a.name).assertEqual('');
+      expect(a.template).assertEqual('');
+      expect(a.timesHeard).assertEqual(1);
+      expect(a.alertsEnabled).assertTrue();
     });
 
-    it('matched_event_increments_times_heard', 0, () => {
+    it('completing_learning_stores_template_and_profile', 0, () => {
       const catalog = new SoundCatalog([]);
-      catalog.registerEvent(event(1, 0), -1, 100000);
-      const again = catalog.registerEvent(event(1, 5), 0, 105000);
-      expect(again.isNew).assertFalse();
-      expect(again.record.timesHeard).assertEqual(2);
-      expect(again.record.lastSeenMs).assertEqual(105000);
-      expect(catalog.records().length).assertEqual(1);
+      const p = catalog.createPending(1000);
+      expect(catalog.completeLearning(p.label, 'QUJD', profile(2000, 1, 3, 3))).assertTrue();
+      expect(catalog.findByLabel(p.label)?.template).assertEqual('QUJD');
+      expect(catalog.learnedTemplates().length).assertEqual(1);
+      expect(catalog.completeLearning('snd-99', 'x', profile(1, 0, 1, 0))).assertFalse();
     });
 
-    it('named_sound_notifies_once_per_cooldown', 0, () => {
+    it('pending_records_are_not_offered_for_registration_and_can_be_discarded', 0, () => {
       const catalog = new SoundCatalog([]);
-      catalog.registerEvent(event(1, 0), -1, 100000);
+      const p = catalog.createPending(1000);
+      expect(catalog.learnedTemplates().length).assertEqual(0);
+      expect(catalog.discard(p.label)).assertTrue();
+      expect(catalog.records().length).assertEqual(0);
+      expect(catalog.discard(p.label)).assertFalse();
+    });
+
+    it('occurrence_of_an_unknown_label_is_ignored', 0, () => {
+      const catalog = learnedCatalog();
+      expect(catalog.registerOccurrence('snd-42', 5000000) === undefined).assertTrue();
+    });
+
+    it('second_occurrence_of_an_unnamed_sound_asks_to_name_it', 0, () => {
+      const catalog = learnedCatalog();
+      const second: Occurrence | undefined = catalog.registerOccurrence('snd-1', 1000000 + MIN);
+      expect(second?.record.timesHeard).assertEqual(2);
+      expect(second?.shouldPrompt).assertTrue();
+      expect(second?.shouldAlert).assertFalse();
+    });
+
+    it('prompt_is_not_repeated_within_ten_minutes_but_returns_after', 0, () => {
+      const catalog = learnedCatalog();
+      const t0 = 1000000 + MIN;
+      expect(catalog.registerOccurrence('snd-1', t0)?.shouldPrompt).assertTrue();
+      expect(catalog.registerOccurrence('snd-1', t0 + 5 * MIN)?.shouldPrompt).assertFalse();
+      expect(catalog.registerOccurrence('snd-1', t0 + 10 * MIN)?.shouldPrompt).assertTrue();
+    });
+
+    it('dont_ask_again_stops_prompts', 0, () => {
+      const catalog = learnedCatalog();
+      catalog.setPromptNever(1);
+      expect(catalog.registerOccurrence('snd-1', 1000000 + 60 * MIN)?.shouldPrompt).assertFalse();
+    });
+
+    it('named_sound_alerts_with_a_fifteen_second_cooldown', 0, () => {
+      const catalog = learnedCatalog();
       catalog.rename(1, 'Doorbell');
-      expect(catalog.registerEvent(event(1, 0), 0, 200000).shouldNotify).assertTrue();
-      expect(catalog.registerEvent(event(1, 0), 0, 205000).shouldNotify).assertFalse();
-      expect(catalog.registerEvent(event(1, 0), 0, 211000).shouldNotify).assertTrue();
+      const t0 = 2000000;
+      expect(catalog.registerOccurrence('snd-1', t0)?.shouldAlert).assertTrue();
+      expect(catalog.registerOccurrence('snd-1', t0 + 10000)?.shouldAlert).assertFalse();
+      expect(catalog.registerOccurrence('snd-1', t0 + 16000)?.shouldAlert).assertTrue();
+      expect(catalog.registerOccurrence('snd-1', t0 + 16000)?.shouldPrompt).assertFalse();
     });
 
-    it('named_sound_with_alerts_off_never_notifies', 0, () => {
-      const catalog = new SoundCatalog([]);
-      catalog.registerEvent(event(1, 0), -1, 100000);
+    it('named_sound_with_alerts_off_never_alerts', 0, () => {
+      const catalog = learnedCatalog();
       catalog.rename(1, 'Doorbell');
       catalog.setAlerts(1, false);
-      expect(catalog.registerEvent(event(1, 0), 0, 200000).shouldNotify).assertFalse();
-      expect(catalog.registerEvent(event(1, 0), 0, 300000).shouldNotify).assertFalse();
+      expect(catalog.registerOccurrence('snd-1', 2000000)?.shouldAlert).assertFalse();
     });
 
-    it('unnamed_sound_never_notifies', 0, () => {
-      const catalog = new SoundCatalog([]);
-      catalog.registerEvent(event(1, 0), -1, 100000);
-      expect(catalog.registerEvent(event(1, 0), 0, 200000).shouldNotify).assertFalse();
-    });
-
-    it('rename_trims_and_limits_and_clears', 0, () => {
-      const catalog = new SoundCatalog([]);
-      catalog.registerEvent(event(1, 0), -1, 100000);
-      catalog.rename(1, '  Doorbell  ');
-      expect(catalog.records()[0].name).assertEqual('Doorbell');
-      catalog.rename(1, '   ');
-      expect(catalog.records()[0].name).assertEqual('');
-      catalog.rename(1, 'x'.repeat(100));
-      expect(catalog.records()[0].name.length).assertEqual(40);
-    });
-
-    it('out_of_range_match_index_creates_a_new_record', 0, () => {
-      const catalog = new SoundCatalog([]);
-      const out = catalog.registerEvent(event(1, 0), 7, 100000);
-      expect(out.isNew).assertTrue();
-      expect(catalog.records().length).assertEqual(1);
-    });
-
-    it('recent_timestamps_are_capped', 0, () => {
-      const catalog = new SoundCatalog([]);
-      catalog.registerEvent(event(1, 0), -1, 100000);
+    it('occurrences_update_count_last_seen_and_a_capped_history', 0, () => {
+      const catalog = learnedCatalog();
       for (let i = 1; i <= 30; i++) {
-        catalog.registerEvent(event(1, 0), 0, 100000 + i * 1000);
+        catalog.registerOccurrence('snd-1', 1000000 + i * 1000);
       }
-      expect(catalog.records()[0].recentMs.length).assertEqual(20);
-      expect(catalog.records()[0].timesHeard).assertEqual(31);
+      const r = catalog.findByLabel('snd-1');
+      expect(r?.timesHeard).assertEqual(31);
+      expect(r?.lastSeenMs).assertEqual(1030000);
+      expect(r?.recentMs.length).assertEqual(20);
     });
 
-    it('parse_of_invalid_json_gives_empty_catalog', 0, () => {
+    it('rename_trims_limits_and_clears', 0, () => {
+      const catalog = learnedCatalog();
+      catalog.rename(1, '  Doorbell  ');
+      expect(catalog.find(1)?.name).assertEqual('Doorbell');
+      catalog.rename(1, '   ');
+      expect(catalog.find(1)?.name).assertEqual('');
+      catalog.rename(1, 'x'.repeat(100));
+      expect(catalog.find(1)?.name.length).assertEqual(40);
+    });
+
+    it('taught_sounds_are_named_and_start_with_zero_occurrences', 0, () => {
+      const catalog = new SoundCatalog([]);
+      const label = catalog.reserveLabel();
+      const auto = catalog.createPending(4000);
+      const r = catalog.addTaught(label, '  Microwave alarm ', 'QUJD', profile(2500, 1, 3, 2), 5000);
+      expect(auto.label === label).assertFalse();
+      expect(r.label).assertEqual(label);
+      expect(r.name).assertEqual('Microwave alarm');
+      expect(r.timesHeard).assertEqual(0);
+      expect(r.template).assertEqual('QUJD');
+      expect(catalog.learnedTemplates().length).assertEqual(1);
+    });
+
+    it('remove_returns_the_record_so_the_engine_can_forget_it', 0, () => {
+      const catalog = learnedCatalog();
+      const removed = catalog.remove(1);
+      expect(removed?.label).assertEqual('snd-1');
+      expect(catalog.records().length).assertEqual(0);
+      expect(catalog.remove(1) === undefined).assertTrue();
+    });
+
+    it('parse_survives_corrupt_and_old_format_data', 0, () => {
       expect(SoundCatalog.parse('{not json').records().length).assertEqual(0);
       expect(SoundCatalog.parse('').records().length).assertEqual(0);
       expect(SoundCatalog.parse('{"a":1}').records().length).assertEqual(0);
-    });
-
-    it('parse_drops_records_with_wrong_fingerprint_length', 0, () => {
-      const bad = record(1, fingerprint(1).slice(0, 28));
-      const good = record(2, fingerprint(2));
-      const catalog = SoundCatalog.parse(JSON.stringify([bad, good]));
-      expect(catalog.records().length).assertEqual(1);
-      expect(catalog.records()[0].id).assertEqual(2);
-    });
-
-    it('parse_drops_records_with_missing_fields', 0, () => {
-      expect(SoundCatalog.parse('[{"id":1}]').records().length).assertEqual(0);
+      // First-version records had a fingerprint and no label/template: dropped, not crashed on.
+      expect(SoundCatalog.parse('[{"id":1,"kind":0,"fingerprint":[1,2],"name":"","alertsEnabled":true}]')
+        .records().length).assertEqual(0);
     });
 
     it('serialize_then_parse_round_trips', 0, () => {
-      const catalog = new SoundCatalog([]);
-      catalog.registerEvent(event(1, 0), -1, 100000);
+      const catalog = learnedCatalog();
       catalog.rename(1, 'Alarm');
       const copy = SoundCatalog.parse(catalog.serialize());
       expect(copy.records().length).assertEqual(1);
-      expect(copy.records()[0].name).assertEqual('Alarm');
-      expect(copy.fingerprints()[0].length).assertEqual(29);
+      const r: SoundRecord | undefined = copy.find(1);
+      expect(r?.name).assertEqual('Alarm');
+      expect(r?.template).assertEqual('AAAA');
+      expect(r?.profile.envelope.length).assertEqual(8);
+    });
+
+    it('describe_explains_a_sound_in_plain_words', 0, () => {
+      expect(SoundCatalog.describe(profile(3000, 1, 3, 3))).assertEqual('High-pitched, 3 beeps per second, about 2.1 s long');
+      expect(SoundCatalog.describe(profile(900, 2, 1, 0))).assertEqual('Mid-pitched, continuous tone, about 2.1 s long');
+      expect(SoundCatalog.describe(profile(500, 0, 1, 0))).assertEqual('Low-pitched, single beep, about 2.1 s long');
+      expect(SoundCatalog.describe(profile(2000, 1, 2, 0.5))).assertEqual('High-pitched, one beep every 2 seconds, about 2.1 s long');
+      expect(SoundCatalog.describe(profile(0, 0, 0, 0))).assertEqual('Still learning this sound');
     });
   });
 }

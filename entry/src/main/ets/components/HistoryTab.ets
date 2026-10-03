@@ -1,5 +1,5 @@
 import { SoundRecord } from '../model/SoundModels';
-import { SoundEditDialog } from './SoundEditDialog';
+import { EnvelopeMini } from './EnvelopeMini';
 
 function twoDigits(n: number): string {
   return n < 10 ? '0' + n : n.toString();
@@ -10,28 +10,11 @@ function clockTime(ms: number): string {
   return twoDigits(d.getHours()) + ':' + twoDigits(d.getMinutes());
 }
 
+// Chronological list of everything the phone has heard (newest first), one entry per sound.
 @Component
 export struct HistoryTab {
   @Prop sounds: SoundRecord[] = [];
-  onEdit: (id: number, name: string, alertsEnabled: boolean) => void =
-    (id: number, name: string, alertsEnabled: boolean): void => {};
-  onToggleAlerts: (id: number, enabled: boolean) => void = (id: number, enabled: boolean): void => {};
-
-  private openEditor(record: SoundRecord): void {
-    const controller: CustomDialogController = new CustomDialogController({
-      builder: SoundEditDialog({
-        recordId: record.id,
-        initialName: record.name,
-        initialAlerts: record.alertsEnabled,
-        onSave: (id: number, name: string, alertsEnabled: boolean): void => {
-          this.onEdit(id, name, alertsEnabled);
-        }
-      }),
-      alignment: DialogAlignment.Center,
-      customStyle: true
-    });
-    controller.open();
-  }
+  onOpen: (id: number) => void = (id: number): void => {};
 
   @Builder
   row(record: SoundRecord) {
@@ -39,35 +22,27 @@ export struct HistoryTab {
       Column({ space: 4 }) {
         if (record.name !== '') {
           Text(record.name).fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.on_surface'))
+        } else if (record.template === '') {
+          Text($r('app.string.learning_sound')).fontSize(18).fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.muted'))
         } else {
-          Text($r('app.string.sound_default_name', record.id)).fontSize(18).fontWeight(FontWeight.Medium)
+          Text($r('app.string.unknown_sound')).fontSize(18).fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.on_surface'))
         }
-        Text(record.kind === 1 ? $r('app.string.kind_pulsed') : $r('app.string.kind_tonal'))
-          .fontSize(14).fontColor($r('app.color.muted'))
-        Text($r('app.string.heard_times', record.timesHeard))
-          .fontSize(14).fontColor($r('app.color.muted'))
-        Text($r('app.string.last_seen', clockTime(record.lastSeenMs)))
-          .fontSize(14).fontColor($r('app.color.muted'))
+        Text($r('app.string.heard_times', record.timesHeard)).fontSize(14).fontColor($r('app.color.muted'))
+        Text($r('app.string.last_seen', clockTime(record.lastSeenMs))).fontSize(14).fontColor($r('app.color.muted'))
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      Column({ space: 4 }) {
-        Text($r('app.string.alerts_label')).fontSize(12).fontColor($r('app.color.muted'))
-        Toggle({ type: ToggleType.Switch, isOn: record.alertsEnabled })
-          .onChange((isOn: boolean): void => {
-            this.onToggleAlerts(record.id, isOn);
-          })
-      }
-      .alignItems(HorizontalAlign.Center)
+      EnvelopeMini({ envelope: record.profile.envelope })
     }
     .width('100%')
     .padding(16)
     .borderRadius(16)
     .backgroundColor($r('app.color.surface'))
     .onClick((): void => {
-      this.openEditor(record);
+      this.onOpen(record.id);
     })
   }
 
@@ -86,7 +61,7 @@ export struct HistoryTab {
               this.row(record)
             }
           }, (record: SoundRecord) => record.id.toString() + '|' + record.timesHeard + '|' + record.name + '|' +
-            record.alertsEnabled)
+            record.template.length)
         }
         .width('100%')
         .layoutWeight(1)

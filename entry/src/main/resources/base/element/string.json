@@ -131,6 +131,122 @@
     {
       "name": "alerts_label",
       "value": "Alerts"
+    },
+    {
+      "name": "tab_mysounds",
+      "value": "My sounds"
+    },
+    {
+      "name": "unknown_sound",
+      "value": "Unknown sound"
+    },
+    {
+      "name": "learning_sound",
+      "value": "Learning this sound…"
+    },
+    {
+      "name": "teach_button",
+      "value": "Teach a sound"
+    },
+    {
+      "name": "teach_title",
+      "value": "Teach a sound"
+    },
+    {
+      "name": "teach_intro",
+      "value": "Play the sound near the phone and record 2 or 3 takes of it. Each take lasts 6 seconds."
+    },
+    {
+      "name": "teach_record",
+      "value": "Record take %d"
+    },
+    {
+      "name": "teach_recording",
+      "value": "Recording… play the sound now (%d s)"
+    },
+    {
+      "name": "teach_take_ok",
+      "value": "Take %d captured"
+    },
+    {
+      "name": "teach_take_bad",
+      "value": "Take %d not usable: %s"
+    },
+    {
+      "name": "teach_name_hint",
+      "value": "Name, for example Microwave alarm"
+    },
+    {
+      "name": "teach_save",
+      "value": "Save sound"
+    },
+    {
+      "name": "teach_need_two",
+      "value": "Record at least 2 good takes, then name the sound."
+    },
+    {
+      "name": "teach_failed",
+      "value": "Could not save the sound: %s"
+    },
+    {
+      "name": "alert_card_title",
+      "value": "%s detected"
+    },
+    {
+      "name": "alert_card_time",
+      "value": "at %s"
+    },
+    {
+      "name": "alert_ongoing",
+      "value": "Still ongoing: heard %d times in the last 30 seconds"
+    },
+    {
+      "name": "alert_once",
+      "value": "Heard %d times so far"
+    },
+    {
+      "name": "prompt_title",
+      "value": "I've heard this sound before"
+    },
+    {
+      "name": "prompt_text",
+      "value": "Do you want to name it?"
+    },
+    {
+      "name": "prompt_name",
+      "value": "Name it"
+    },
+    {
+      "name": "prompt_later",
+      "value": "Not now"
+    },
+    {
+      "name": "prompt_never",
+      "value": "Don't ask again for this sound"
+    },
+    {
+      "name": "detail_title",
+      "value": "Sound details"
+    },
+    {
+      "name": "detail_alerts",
+      "value": "Notify me when heard"
+    },
+    {
+      "name": "detail_delete",
+      "value": "Delete sound"
+    },
+    {
+      "name": "detail_delete_confirm",
+      "value": "Tap again to delete for good"
+    },
+    {
+      "name": "mysounds_empty",
+      "value": "Named sounds appear here. Name a sound from History, or teach a new one on the Listen tab."
+    },
+    {
+      "name": "first_heard",
+      "value": "First heard %s"
     }
   ]
 }

@@ -1,32 +1,59 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { SoundCatalog } from '../main/ets/model/SoundCatalog';
-import { DetectedEvent, MatchResult } from '../main/ets/model/SoundModels';
-import { AlertPort, MatcherPort, SavePort, SoundPipeline } from '../main/ets/services/SoundPipeline';
+import { EngineEvent, LearnOutcome, SoundProfile, SoundRecord } from '../main/ets/model/SoundModels';
+import { AlertPort, EnginePort, PipelineListener, SavePort, SoundPipeline } from '../main/ets/services/SoundPipeline';
 
-class FakeMatcher implements MatcherPort {
-  answers: number[] = [];
-  savedSeen: number = -1;
+function profile(): SoundProfile {
+  const p: SoundProfile = {
+    dominantHz: 2000, durationSec: 1.5, beepCount: 3, beepsPerSec: 3, repetition: 1, modulation: 1,
+    envelope: [1, 0.5, 1, 0.5, 1, 0.5, 1, 0.5]
+  };
+  return p;
+}
+
+class FakeEngine implements EnginePort {
+  results: LearnOutcome[] = [];
+  calls: string[] = [];
   private next: number = 0;
 
-  matchFingerprint(fp: number[], saved: number[][]): MatchResult {
-    this.savedSeen = saved.length;
-    const index = this.next < this.answers.length ? this.answers[this.next] : -1;
+  learnSound(label: string, eventTimeSec: number): LearnOutcome {
+    this.calls.push(label + '@' + eventTimeSec);
+    const r = this.next < this.results.length ? this.results[this.next] : FakeEngine.good();
     this.next++;
-    const result: MatchResult = { index: index, score: index >= 0 ? 0.9 : 0 };
-    return result;
+    return r;
+  }
+
+  static good(): LearnOutcome {
+    const o: LearnOutcome = { ok: true, message: '', template: 'QUJD', profile: profile(), consistency: 1 };
+    return o;
+  }
+
+  static bad(message: string): LearnOutcome {
+    const o: LearnOutcome = { ok: false, message: message, template: '', profile: profile(), consistency: 0 };
+    return o;
   }
 }
 
 class FakeAlerts implements AlertPort {
-  vibrations: number = 0;
-  notified: string[] = [];
+  unknownPulses: number = 0;
+  namedPatterns: number = 0;
+  namedNotes: string[] = [];
+  prompts: number = 0;
 
-  vibrate(): void {
-    this.vibrations++;
+  vibrateUnknown(): void {
+    this.unknownPulses++;
   }
 
-  async notifyKnownSound(name: string): Promise<void> {
-    this.notified.push(name);
+  vibrateNamed(): void {
+    this.namedPatterns++;
+  }
+
+  notifyNamed(name: string, timeMs: number): void {
+    this.namedNotes.push(name + '@' + timeMs);
+  }
+
+  notifyPrompt(): void {
+    this.prompts++;
   }
 }
 
@@ -38,108 +65,177 @@ class FakeSaver implements SavePort {
   }
 }
 
-function event(startSec: number): DetectedEvent {
-  const fp: number[] = [];
-  for (let i = 0; i < 29; i++) {
-    fp.push(0.1);
+class FakeListener implements PipelineListener {
+  heard: string[] = [];
+  alerts: string[] = [];
+  prompts: string[] = [];
+  detections: number = 0;
+  changes: number = 0;
+
+  onSoundHeard(record: SoundRecord, isNew: boolean): void {
+    this.heard.push(record.label + (isNew ? ':new' : ':again'));
   }
-  const ev: DetectedEvent = { startSec: startSec, durationSec: 1, kind: 0, fingerprint: fp };
-  return ev;
+
+  onAlert(record: SoundRecord, timeMs: number): void {
+    this.alerts.push(record.name + '@' + timeMs);
+  }
+
+  onPrompt(record: SoundRecord): void {
+    this.prompts.push(record.label);
+  }
+
+  onDetection(timeMs: number): void {
+    this.detections++;
+  }
+
+  onChanged(): void {
+    this.changes++;
+  }
 }
+
+function alarm(timeSec: number): EngineEvent {
+  const e: EngineEvent = { type: 'alarm', timeSec: timeSec, startSec: timeSec, confidence: 1, freqHz: 2000, levelDb: -20, label: '' };
+  return e;
+}
+
+function custom(label: string, startSec: number, timeSec: number): EngineEvent {
+  const e: EngineEvent = { type: 'custom', timeSec: timeSec, startSec: startSec, confidence: 1, freqHz: 0, levelDb: -20, label: label };
+  return e;
+}
+
+class Rig {
+  engine: FakeEngine = new FakeEngine();
+  alerts: FakeAlerts = new FakeAlerts();
+  saver: FakeSaver = new FakeSaver();
+  listener: FakeListener = new FakeListener();
+  catalog: SoundCatalog = new SoundCatalog([]);
+  pipeline: SoundPipeline = new SoundPipeline(this.catalog, this.engine, this.alerts, this.saver, this.listener);
+
+  // A previously learned sound 'snd-1' (optionally named).
+  withKnownSound(name: string): Rig {
+    const p = this.catalog.createPending(1000);
+    this.catalog.completeLearning(p.label, 'QUJD', profile());
+    if (name !== '') {
+      this.catalog.rename(p.id, name);
+    }
+    return this;
+  }
+}
+
+const T0: number = 5000000;
 
 export default function soundPipelineTest() {
   describe('soundPipeline', () => {
-    it('unknown_sound_is_added_vibrates_and_saves_without_notifying', 0, () => {
-      const matcher = new FakeMatcher();
-      const alerts = new FakeAlerts();
-      const saver = new FakeSaver();
-      const catalog = new SoundCatalog([]);
-      const pipeline = new SoundPipeline(catalog, matcher, alerts, saver);
-      const outcomes = pipeline.handle([event(0)], 1000000);
-      expect(outcomes.length).assertEqual(1);
-      expect(outcomes[0].isNew).assertTrue();
-      expect(alerts.vibrations).assertEqual(1);
-      expect(alerts.notified.length).assertEqual(0);
-      expect(saver.saves).assertEqual(1);
-      expect(catalog.records().length).assertEqual(1);
+    it('an_unexplained_alarm_becomes_an_unknown_sound_after_the_hold_time', 0, () => {
+      const rig = new Rig();
+      rig.pipeline.handle([alarm(10)], T0);
+      expect(rig.listener.detections).assertEqual(1);
+      rig.pipeline.tick(T0 + SoundPipeline.HOLD_MS - 100);
+      expect(rig.catalog.records().length).assertEqual(0);
+      rig.pipeline.tick(T0 + SoundPipeline.HOLD_MS + 100);
+      expect(rig.catalog.records().length).assertEqual(1);
+      expect(rig.listener.heard[0]).assertEqual('snd-1:new');
+      expect(rig.alerts.unknownPulses).assertEqual(1);
+      expect(rig.engine.calls[0]).assertEqual('snd-1@10');
+      expect(rig.catalog.findByLabel('snd-1')?.template).assertEqual('QUJD');
+      expect(rig.saver.saves > 0).assertTrue();
     });
 
-    it('named_sound_heard_again_notifies_with_its_name', 0, () => {
-      const matcher = new FakeMatcher();
-      matcher.answers = [-1, 0];
-      const alerts = new FakeAlerts();
-      const catalog = new SoundCatalog([]);
-      const pipeline = new SoundPipeline(catalog, matcher, alerts, new FakeSaver());
-      pipeline.handle([event(0)], 1000000);
-      catalog.rename(1, 'Doorbell');
-      const outcomes = pipeline.handle([event(0)], 1100000);
-      expect(outcomes[0].isNew).assertFalse();
-      expect(alerts.notified.length).assertEqual(1);
-      expect(alerts.notified[0]).assertEqual('Doorbell');
-      expect(matcher.savedSeen).assertEqual(1);
+    it('a_sound_that_could_not_be_learned_is_forgotten', 0, () => {
+      const rig = new Rig();
+      rig.engine.results = [FakeEngine.bad('The sound is not clear enough.')];
+      rig.pipeline.handle([alarm(10)], T0);
+      rig.pipeline.tick(T0 + SoundPipeline.HOLD_MS + 100);
+      expect(rig.catalog.records().length).assertEqual(0);
+      expect(rig.listener.changes > 0).assertTrue();
     });
 
-    it('every_detection_vibrates_but_rapid_repeats_notify_once', 0, () => {
-      const matcher = new FakeMatcher();
-      matcher.answers = [-1, 0, 0];
-      const alerts = new FakeAlerts();
-      const catalog = new SoundCatalog([]);
-      const pipeline = new SoundPipeline(catalog, matcher, alerts, new FakeSaver());
-      pipeline.handle([event(0)], 1000000);
-      catalog.rename(1, 'Alarm');
-      pipeline.handle([event(0), event(2)], 1100000);
-      expect(alerts.vibrations).assertEqual(3);
-      expect(alerts.notified.length).assertEqual(1);
+    it('learning_is_retried_when_the_audio_is_not_there_yet', 0, () => {
+      const rig = new Rig();
+      rig.engine.results = [FakeEngine.bad('Not enough audio after the sound yet.'), FakeEngine.good()];
+      rig.pipeline.handle([alarm(10)], T0);
+      rig.pipeline.tick(T0 + SoundPipeline.HOLD_MS + 100);
+      expect(rig.catalog.findByLabel('snd-1')?.template).assertEqual('');
+      rig.pipeline.tick(T0 + SoundPipeline.HOLD_MS + SoundPipeline.RETRY_MS + 200);
+      expect(rig.catalog.findByLabel('snd-1')?.template).assertEqual('QUJD');
+      expect(rig.engine.calls.length).assertEqual(2);
     });
 
-    it('event_time_is_capture_start_plus_event_offset', 0, () => {
-      const catalog = new SoundCatalog([]);
-      const pipeline = new SoundPipeline(catalog, new FakeMatcher(), new FakeAlerts(), new FakeSaver());
-      pipeline.handle([event(2.5)], 1000000);
-      expect(catalog.records()[0].lastSeenMs).assertEqual(1002500);
+    it('a_recognised_sound_explains_the_alarm_so_no_duplicate_is_created', 0, () => {
+      const rig = new Rig().withKnownSound('');
+      rig.pipeline.handle([alarm(10)], T0);
+      rig.pipeline.handle([custom('snd-1', 9.6, 12.5)], T0 + 2500);
+      rig.pipeline.tick(T0 + 10000);
+      expect(rig.catalog.records().length).assertEqual(1);
+      expect(rig.catalog.find(1)?.timesHeard).assertEqual(2);
+      expect(rig.engine.calls.length).assertEqual(0);
     });
 
-    it('event_starting_during_our_own_vibration_is_ignored', 0, () => {
-      const alerts = new FakeAlerts();
-      const catalog = new SoundCatalog([]);
-      const pipeline = new SoundPipeline(catalog, new FakeMatcher(), alerts, new FakeSaver());
-      // First event at t=1000 s is handled at wall-clock 1002000 ms and vibrates the phone.
-      pipeline.handle([event(1)], 1000000 - 1000, 1002000);
-      // The motor's noise shows up as an event starting 0.5 s after the vibration began: ignore it.
-      const outcomes = pipeline.handle([event(3)], 1000000 - 1000, 1003500);
-      expect(outcomes.length).assertEqual(0);
-      expect(alerts.vibrations).assertEqual(1);
-      expect(catalog.records().length).assertEqual(1);
+    it('the_second_occurrence_of_an_unnamed_sound_asks_to_name_it', 0, () => {
+      const rig = new Rig().withKnownSound('');
+      rig.pipeline.handle([custom('snd-1', 9, 11)], T0);
+      expect(rig.listener.prompts.length).assertEqual(1);
+      expect(rig.alerts.prompts).assertEqual(1);
+      expect(rig.alerts.unknownPulses).assertEqual(1);
+      expect(rig.alerts.namedPatterns).assertEqual(0);
+      rig.pipeline.handle([custom('snd-1', 20, 22)], T0 + 30000);
+      expect(rig.listener.prompts.length).assertEqual(1);
     });
 
-    it('event_starting_after_the_vibration_window_is_handled', 0, () => {
-      const alerts = new FakeAlerts();
-      const catalog = new SoundCatalog([]);
-      const pipeline = new SoundPipeline(catalog, new FakeMatcher(), alerts, new FakeSaver());
-      pipeline.handle([event(1)], 1000000 - 1000, 1002000);
-      // Starts 5 s after the vibration began, well past vibration plus tail.
-      const outcomes = pipeline.handle([event(7)], 1000000 - 1000, 1009000);
-      expect(outcomes.length).assertEqual(1);
-      expect(alerts.vibrations).assertEqual(2);
+    it('a_named_sound_vibrates_notifies_and_shows_a_card', 0, () => {
+      const rig = new Rig().withKnownSound('Doorbell');
+      rig.pipeline.handle([custom('snd-1', 9, 11)], T0);
+      expect(rig.alerts.namedPatterns).assertEqual(1);
+      expect(rig.alerts.namedNotes[0]).assertEqual('Doorbell@' + T0);
+      expect(rig.listener.alerts[0]).assertEqual('Doorbell@' + T0);
+      expect(rig.alerts.prompts).assertEqual(0);
+      expect(rig.alerts.unknownPulses).assertEqual(0);
     });
 
-    it('event_that_started_before_the_vibration_is_still_handled', 0, () => {
-      const alerts = new FakeAlerts();
-      const catalog = new SoundCatalog([]);
-      const pipeline = new SoundPipeline(catalog, new FakeMatcher(), alerts, new FakeSaver());
-      pipeline.handle([event(1)], 1000000 - 1000, 1002000);
-      // A different sound that began 1.5 s before that vibration, reported late because it closed late.
-      const outcomes = pipeline.handle([event(0.5)], 1000000 - 1000, 1003000);
-      expect(outcomes.length).assertEqual(1);
+    it('a_repeating_named_sound_alerts_once_per_cooldown_but_keeps_counting', 0, () => {
+      const rig = new Rig().withKnownSound('Doorbell');
+      rig.pipeline.handle([custom('snd-1', 9, 11)], T0);
+      rig.pipeline.handle([custom('snd-1', 12, 14)], T0 + 3000);
+      rig.pipeline.handle([custom('snd-1', 15, 17)], T0 + 6000);
+      expect(rig.alerts.namedPatterns).assertEqual(1);
+      expect(rig.alerts.namedNotes.length).assertEqual(1);
+      expect(rig.listener.heard.length).assertEqual(3);
+      expect(rig.catalog.find(1)?.timesHeard).assertEqual(4);
+      rig.pipeline.handle([custom('snd-1', 30, 32)], T0 + 20000);
+      expect(rig.alerts.namedPatterns).assertEqual(2);
     });
 
-    it('empty_event_list_does_nothing', 0, () => {
-      const alerts = new FakeAlerts();
-      const saver = new FakeSaver();
-      const pipeline = new SoundPipeline(new SoundCatalog([]), new FakeMatcher(), alerts, saver);
-      expect(pipeline.handle([], 1000000).length).assertEqual(0);
-      expect(alerts.vibrations).assertEqual(0);
-      expect(saver.saves).assertEqual(0);
+    it('a_named_sound_with_alerts_off_stays_silent', 0, () => {
+      const rig = new Rig().withKnownSound('Doorbell');
+      rig.catalog.setAlerts(1, false);
+      rig.pipeline.handle([custom('snd-1', 9, 11)], T0);
+      expect(rig.alerts.namedPatterns).assertEqual(0);
+      expect(rig.alerts.unknownPulses).assertEqual(0);
+      expect(rig.listener.heard.length).assertEqual(1);
+    });
+
+    it('several_alarms_in_one_burst_create_one_sound', 0, () => {
+      const rig = new Rig();
+      rig.pipeline.handle([alarm(10)], T0);
+      rig.pipeline.handle([alarm(11)], T0 + 1000);
+      rig.pipeline.handle([alarm(12)], T0 + 2000);
+      rig.pipeline.tick(T0 + 8000);
+      expect(rig.catalog.records().length).assertEqual(1);
+    });
+
+    it('an_unknown_label_from_the_engine_is_ignored', 0, () => {
+      const rig = new Rig();
+      rig.pipeline.handle([custom('snd-99', 1, 2)], T0);
+      expect(rig.catalog.records().length).assertEqual(0);
+      expect(rig.alerts.unknownPulses).assertEqual(0);
+    });
+
+    it('nothing_happens_for_an_empty_batch', 0, () => {
+      const rig = new Rig();
+      rig.pipeline.handle([], T0);
+      rig.pipeline.tick(T0 + 10000);
+      expect(rig.listener.detections).assertEqual(0);
+      expect(rig.saver.saves).assertEqual(0);
     });
   });
 }
