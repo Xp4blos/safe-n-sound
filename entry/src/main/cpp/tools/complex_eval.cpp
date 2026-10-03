@@ -60,13 +60,13 @@ std::vector<int16_t> Take(NoiseSource& noise, const std::vector<double>& sig, do
 }
 
 
-// --export <dir>: writes the five signals as 16 kHz mono WAV files (RMS 0.3) for playback tests on a phone.
+// --export <dir>: writes the five signals as 16 kHz mono WAV files (RMS 0.45) for playback tests on a phone.
 void WriteWav(const std::string& path, const std::vector<double>& sig) {
-    // Equal average loudness for every signal (RMS 0.3), hard-limited at 0.98, so a decaying chime is as loud as a siren.
+    // Equal average loudness for every signal (RMS 0.45), hard-limited at 0.98, so a decaying chime is as loud as a siren.
     const double rms = Rms(sig);
     std::vector<int16_t> pcm(sig.size());
     for (size_t i = 0; i < sig.size(); ++i) {
-        const double v = rms > 0 ? 0.3 * sig[i] / rms : 0.0;
+        const double v = rms > 0 ? 0.45 * sig[i] / rms : 0.0;
         pcm[i] = ToSample(std::max(-0.98, std::min(0.98, v)));
     }
     FILE* f = std::fopen(path.c_str(), "wb");

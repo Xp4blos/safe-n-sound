@@ -171,6 +171,27 @@ export default function soundPipelineTest() {
       expect(rig.engine.calls.length).assertEqual(0);
     });
 
+    it('a_beep_that_arrives_just_after_the_match_is_still_explained_by_it', 0, () => {
+      // From a real run: the stored sound was matched after two beeps, the third beep of the same play (inside the
+      // matched window) arrived 0.4 s later and was learned again as a duplicate unknown sound.
+      const rig = new Rig().withKnownSound('');
+      rig.pipeline.handle([alarm(27.74)], T0);
+      rig.pipeline.handle([alarm(28.67)], T0 + 930);
+      rig.pipeline.handle([custom('snd-1', 26.11, 29.15)], T0 + 1410);
+      rig.pipeline.handle([alarm(29.57)], T0 + 1830);
+      rig.pipeline.tick(T0 + 10000);
+      expect(rig.catalog.records().length).assertEqual(1);
+      expect(rig.engine.calls.length).assertEqual(0);
+    });
+
+    it('an_alarm_long_after_a_match_is_still_a_new_sound', 0, () => {
+      const rig = new Rig().withKnownSound('');
+      rig.pipeline.handle([custom('snd-1', 26.11, 29.15)], T0);
+      rig.pipeline.handle([alarm(40)], T0 + 10850);
+      rig.pipeline.tick(T0 + 20000);
+      expect(rig.catalog.records().length).assertEqual(2);
+    });
+
     it('the_second_occurrence_of_an_unnamed_sound_asks_to_name_it', 0, () => {
       const rig = new Rig().withKnownSound('');
       rig.pipeline.handle([custom('snd-1', 9, 11)], T0);

@@ -177,6 +177,8 @@ History as "Unknown sound", the same sound again triggers "I've heard this sound
 and the third time the "Doorbell detected" card appears. The phone's vibration cannot be filmed. The video is attached
 to the GitHub release: https://github.com/Xp4blos/safe-n-sound/releases/tag/v1.0.0 (`safe-n-sound-demo.mp4`).
 
+A longer second video (4 min, same phone) adds **Teach a sound**: two complex sounds (an irregular note pattern with three pitches and a pulsing tone) are taught from three takes each and alert under their own names. It is built with the same method; the file is `dist/safe-n-sound-demo-2.mp4` on the machine that recorded it (not committed).
+
 ## Known limitations
 
 - Listening stops when the app goes to the background or the screen locks (foreground only).

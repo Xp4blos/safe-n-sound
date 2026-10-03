@@ -25,6 +25,11 @@ export interface PipelineListener {
   onChanged(): void; // the list of sounds changed
 }
 
+interface SoundWindow {
+  fromSec: number;
+  toSec: number;
+}
+
 interface HeldAlarm {
   event: EngineEvent;
   arrivedMs: number;
@@ -50,6 +55,7 @@ export class SoundPipeline {
   private saver: SavePort;
   private listener: PipelineListener;
   private held: HeldAlarm[] = [];
+  private explained: SoundWindow[] = []; // windows of recognised sounds, for beeps that arrive after the match
   private lastNewSoundMs: number = -1e15;
 
   constructor(catalog: SoundCatalog, engine: EnginePort, alerts: AlertPort, saver: SavePort, listener: PipelineListener) {
@@ -67,6 +73,9 @@ export class SoundPipeline {
         this.onCustom(ev, nowMs);
       } else if (ev.type === 'alarm') {
         this.listener.onDetection(nowMs);
+        if (this.isExplained(ev.timeSec)) {
+          continue; // a beep of a sound that was just recognised, it only arrived a moment after the match
+        }
         const h: HeldAlarm = { event: ev, arrivedMs: nowMs, dueMs: nowMs + SoundPipeline.HOLD_MS, attempts: 0, label: '' };
         this.held.push(h);
       }
@@ -95,6 +104,11 @@ export class SoundPipeline {
     const from = ev.startSec - SoundPipeline.EXPLAIN_MARGIN_SEC;
     const to = ev.timeSec + SoundPipeline.EXPLAIN_MARGIN_SEC;
     this.held = this.held.filter((h: HeldAlarm): boolean => h.event.timeSec < from || h.event.timeSec > to);
+    const matched: SoundWindow = { fromSec: from, toSec: to };
+    this.explained.push(matched);
+    if (this.explained.length > 8) {
+      this.explained.shift();
+    }
 
     const occurrence = this.catalog.registerOccurrence(ev.label, nowMs);
     if (occurrence === undefined) {
@@ -114,6 +128,10 @@ export class SoundPipeline {
     }
     this.listener.onSoundHeard(record, false);
     this.saver.save();
+  }
+
+  private isExplained(timeSec: number): boolean {
+    return this.explained.some((w: SoundWindow): boolean => timeSec >= w.fromSec && timeSec <= w.toSec);
   }
 
   private resolveAlarm(h: HeldAlarm, nowMs: number): void {
