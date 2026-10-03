@@ -78,6 +78,8 @@ struct Index {
   private store: SoundStore | undefined = undefined;
   private audioService: AudioService | undefined = undefined;
   private takeBuffers: ArrayBuffer[] = [];
+  private teachOpen: boolean = false;
+  private pendingPromptId: number = -1; // a naming prompt that came up while the Teach dialog was open
 
   aboutToAppear(): void {
     this.setUp();
@@ -244,6 +246,12 @@ struct Index {
 
   // "I've heard this sound before. Do you want to name it?"
   private openPrompt(record: SoundRecord): void {
+    if (this.teachOpen) {
+      // Two dialogs on top of each other block saving the taught sound; ask again once Teach is closed.
+      hilog.info(LOG_DOMAIN, TAG, 'DIALOG prompt deferred id=%{public}d (Teach is open)', record.id);
+      this.pendingPromptId = record.id;
+      return;
+    }
     hilog.info(LOG_DOMAIN, TAG, 'DIALOG prompt open id=%{public}d name=%{public}s', record.id, record.name);
     const id = record.id;
     let dialog: CustomDialogController | undefined = undefined;
@@ -264,6 +272,19 @@ struct Index {
       customStyle: true
     });
     dialog.open();
+  }
+
+  private openPendingPrompt(): void {
+    const id = this.pendingPromptId;
+    this.pendingPromptId = -1;
+    const store = this.store;
+    if (id < 0 || store === undefined) {
+      return;
+    }
+    const record = store.catalog().find(id);
+    if (record !== undefined && record.name === '' && !record.promptNever) {
+      this.openPrompt(record);
+    }
   }
 
   private async neverAsk(id: number): Promise<void> {
@@ -289,11 +310,14 @@ struct Index {
       return;
     }
     this.takeBuffers = [];
+    this.teachOpen = true;
     let dialog: CustomDialogController | undefined = undefined;
     dialog = new CustomDialogController({
       builder: TeachDialog({
         onClose: (): void => {
           dialog?.close();
+          this.teachOpen = false;
+          this.openPendingPrompt();
         },
         recordTake: (): Promise<TakeStatus> => this.recordTake(),
         saveSound: (name: string): Promise<string> => this.saveTaught(name),
