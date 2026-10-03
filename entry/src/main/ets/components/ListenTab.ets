@@ -1,6 +1,7 @@
 import { SoundCatalog } from '../model/SoundCatalog';
 import { SoundRecord } from '../model/SoundModels';
 import { ListenState } from '../services/AudioService';
+import { AlertCard } from './AlertCard';
 import { PulsingMic } from './PulsingMic';
 import { SpectrumView } from './SpectrumView';
 
@@ -33,10 +34,6 @@ export struct ListenTab {
 
   private hasProblem(): boolean {
     return this.state === 'permission_denied' || this.state === 'error';
-  }
-
-  private recentCount(record: SoundRecord): number {
-    return record.recentMs.filter((t: number): boolean => record.lastSeenMs - t <= 30000).length;
   }
 
   private chipColor(): ResourceColor {
@@ -90,44 +87,6 @@ export struct ListenTab {
     .borderRadius(18)
     .backgroundColor($r('app.color.surface'))
     .border({ width: 1.5, color: $r('app.color.danger') })
-  }
-
-  // Full-width card for a named sound that was just heard: impossible to miss.
-  @Builder
-  alertCard(record: SoundRecord) {
-    Row({ space: 16 }) {
-      Column() {
-        SymbolGlyph($r('sys.symbol.bell'))
-          .fontSize(30)
-          .fontColor([$r('app.color.on_accent')])
-      }
-      .width(56)
-      .height(56)
-      .borderRadius(28)
-      .justifyContent(FlexAlign.Center)
-      .backgroundColor('#33FFFFFF')
-
-      Column({ space: 4 }) {
-        Text($r('app.string.alert_card_title', record.name))
-          .fontSize(22).fontWeight(FontWeight.Bold).fontColor($r('app.color.on_accent'))
-        Text($r('app.string.at_time', clockTime(record.lastSeenMs)))
-          .fontSize(15).fontColor($r('app.color.on_accent')).opacity(0.9)
-        if (this.recentCount(record) > 1) {
-          Text($r('app.string.alert_ongoing', this.recentCount(record)))
-            .fontSize(13).fontColor($r('app.color.on_accent')).opacity(0.9)
-        } else {
-          Text($r('app.string.alert_once', record.timesHeard))
-            .fontSize(13).fontColor($r('app.color.on_accent')).opacity(0.9)
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-    }
-    .width('100%')
-    .padding(20)
-    .borderRadius(26)
-    .linearGradient({ angle: 120, colors: [[$r('app.color.accent'), 0], [$r('app.color.accent_end'), 1]] })
-    .shadow({ radius: 20, color: '#443B7BF0', offsetY: 8 })
   }
 
   @Builder
@@ -242,7 +201,7 @@ export struct ListenTab {
     // push the buttons down. Tap it to dismiss.
     if (this.alertRecord !== undefined) {
       Column() {
-        this.alertCard(this.alertRecord)
+        AlertCard({ record: this.alertRecord })
       }
       .width('100%')
       .padding({ left: 18, right: 18, top: 78 })

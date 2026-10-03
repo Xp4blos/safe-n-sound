@@ -164,6 +164,7 @@ export default function soundCatalogTest() {
       expect(SoundCatalog.describe(profile(900, 2, 1, 0))).assertEqual('Mid-pitched, continuous tone, about 2.1 s long');
       expect(SoundCatalog.describe(profile(500, 0, 1, 0))).assertEqual('Low-pitched, single beep, about 2.1 s long');
       expect(SoundCatalog.describe(profile(2000, 1, 2, 0.5))).assertEqual('High-pitched, one beep every 2 seconds, about 2.1 s long');
+      expect(SoundCatalog.describe(profile(2000, 1, 2, 0.8))).assertEqual('High-pitched, one beep every second, about 2.1 s long');
       expect(SoundCatalog.describe(profile(0, 0, 0, 0))).assertEqual('Still learning this sound');
     });
   });

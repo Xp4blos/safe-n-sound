@@ -297,7 +297,8 @@ export class SoundCatalog {
     } else if (p.repetition === 1 && p.beepsPerSec >= 1) {
       parts.push(String(Math.round(p.beepsPerSec * 2) / 2) + ' beeps per second');
     } else if (p.repetition === 1 && p.beepsPerSec > 0) {
-      parts.push('one beep every ' + Math.round(1 / p.beepsPerSec) + ' seconds');
+      const every = Math.round(1 / p.beepsPerSec);
+      parts.push(every <= 1 ? 'one beep every second' : 'one beep every ' + every + ' seconds');
     } else if (p.repetition === 1) {
       parts.push(p.beepCount + ' beeps');
     } else if (p.modulation === 2) {

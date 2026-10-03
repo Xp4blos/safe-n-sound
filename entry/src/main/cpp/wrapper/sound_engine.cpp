@@ -163,6 +163,9 @@ LearnResult SoundEngine::Train(const std::string& label, const std::vector<ambie
         ambient::TrainOptions options;
         options.default_threshold = matchThreshold_;
         ambient::TrainResult tr = ambient::train_custom_sound(cfg_, label, recordings, options);
+        // With several recordings the trainer picks a threshold of 0.7-0.9 from how well they agree; on a phone in a
+        // real room that misses quieter repeats, so it is capped at the same value as for a single recording.
+        tr.sound.threshold = std::min(tr.sound.threshold, matchThreshold_);
         if (registerSound) detector_.add_custom_sound(tr.sound);
         r.templateBytes = ambient::serialize(tr.sound);
         r.consistency = tr.consistency;
