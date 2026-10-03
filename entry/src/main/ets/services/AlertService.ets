@@ -2,6 +2,7 @@ import { vibrator } from '@kit.SensorServiceKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common } from '@kit.AbilityKit';
+import { AlertPort } from './SoundPipeline';
 
 const LOG_DOMAIN: number = 0x3201;
 const TAG: string = 'AlertService';
@@ -9,7 +10,7 @@ const PULSE_MS: number = 300;
 const PULSE_GAP_MS: number = 150;
 
 // Vibration on every detection, notification for named sounds. Both degrade silently when unavailable.
-export class AlertService {
+export class AlertService implements AlertPort {
   private nextNotificationId: number = 1000;
 
   // Resolves to whether notifications may be shown, asking the user once if they have not decided yet.

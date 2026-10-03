@@ -1,6 +1,7 @@
 import { preferences } from '@kit.ArkData';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { SoundCatalog } from '../model/SoundCatalog';
+import { SavePort } from './SoundPipeline';
 
 const LOG_DOMAIN: number = 0x3201;
 const TAG: string = 'SoundStore';
@@ -8,7 +9,7 @@ const STORE_NAME: string = 'sounds';
 const CATALOG_KEY: string = 'catalog';
 
 // Persists the sound catalog on the device (fingerprints and metadata only, never audio).
-export class SoundStore {
+export class SoundStore implements SavePort {
   private prefs: preferences.Preferences | undefined;
   private current: SoundCatalog;
 
