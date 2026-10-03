@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "label"
+    },
+    {
+      "name": "mic_reason",
+      "value": "Safe'n'Sound listens through the microphone to detect alarms, beeps and door rings. Audio is analysed on this device only and is never stored or sent anywhere."
     }
   ]
 }
