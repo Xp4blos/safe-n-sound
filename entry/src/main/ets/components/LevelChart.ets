@@ -16,7 +16,7 @@ export struct LevelChart {
             .borderRadius(2)
             .backgroundColor($r('app.color.accent'))
             .opacity(0.35 + 0.65 * (index / Math.max(1, this.bars.length - 1)))
-        }, (value: number, index: number) => index.toString())
+        }, (value: number, index: number) => index.toString() + ':' + value.toFixed(2))
       }
       .width('100%')
       .height(this.chartHeight)

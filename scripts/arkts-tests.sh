@@ -3,6 +3,7 @@
 # Needs the DevEco Studio tools (hvigorw, node, ...) on PATH.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+mkdir -p build-host
 hvigorw test --mode module -p module=entry@default -p product=default --no-daemon > build-host/arkts-tests.log 2>&1 \
   || { tail -30 build-host/arkts-tests.log; exit 1; }
 result=entry/.test/default/intermediates/test/coverage_data/test_result.txt

@@ -99,6 +99,40 @@ export default function soundPipelineTest() {
       expect(catalog.records()[0].lastSeenMs).assertEqual(1002500);
     });
 
+    it('event_starting_during_our_own_vibration_is_ignored', 0, () => {
+      const alerts = new FakeAlerts();
+      const catalog = new SoundCatalog([]);
+      const pipeline = new SoundPipeline(catalog, new FakeMatcher(), alerts, new FakeSaver());
+      // First event at t=1000 s is handled at wall-clock 1002000 ms and vibrates the phone.
+      pipeline.handle([event(1)], 1000000 - 1000, 1002000);
+      // The motor's noise shows up as an event starting 0.5 s after the vibration began: ignore it.
+      const outcomes = pipeline.handle([event(3)], 1000000 - 1000, 1003500);
+      expect(outcomes.length).assertEqual(0);
+      expect(alerts.vibrations).assertEqual(1);
+      expect(catalog.records().length).assertEqual(1);
+    });
+
+    it('event_starting_after_the_vibration_window_is_handled', 0, () => {
+      const alerts = new FakeAlerts();
+      const catalog = new SoundCatalog([]);
+      const pipeline = new SoundPipeline(catalog, new FakeMatcher(), alerts, new FakeSaver());
+      pipeline.handle([event(1)], 1000000 - 1000, 1002000);
+      // Starts 5 s after the vibration began, well past vibration plus tail.
+      const outcomes = pipeline.handle([event(7)], 1000000 - 1000, 1009000);
+      expect(outcomes.length).assertEqual(1);
+      expect(alerts.vibrations).assertEqual(2);
+    });
+
+    it('event_that_started_before_the_vibration_is_still_handled', 0, () => {
+      const alerts = new FakeAlerts();
+      const catalog = new SoundCatalog([]);
+      const pipeline = new SoundPipeline(catalog, new FakeMatcher(), alerts, new FakeSaver());
+      pipeline.handle([event(1)], 1000000 - 1000, 1002000);
+      // A different sound that began 1.5 s before that vibration, reported late because it closed late.
+      const outcomes = pipeline.handle([event(0.5)], 1000000 - 1000, 1003000);
+      expect(outcomes.length).assertEqual(1);
+    });
+
     it('empty_event_list_does_nothing', 0, () => {
       const alerts = new FakeAlerts();
       const saver = new FakeSaver();

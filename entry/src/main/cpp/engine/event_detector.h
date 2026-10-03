@@ -13,6 +13,7 @@ constexpr double kCloseSilenceSec = 0.8;  // an event closes after this much ina
 constexpr double kMaxEventSec = 10.0;     // events are force-closed at this length
 constexpr double kMinEventSec = 0.15;     // shorter events are dropped
 constexpr float kFloorMinDb = -70.0f;     // the noise floor never drops below this
+constexpr int kWarmupFrames = 8;          // ~0.26 s of ambient sound calibrates the floor; no events meanwhile
 
 class EventDetector {
 public:
@@ -32,6 +33,10 @@ private:
     double lastActiveEndSec_ = 0.0;
     int segments_ = 0;
     int inactiveRun_ = 0;
+    int warmupSeen_ = 0;
+    double warmupSumDb_ = 0.0;
+    double eventLevelSumDb_ = 0.0;  // sum of levels of the active frames of the event in progress
+    int eventLevelCount_ = 0;
     std::vector<FrameFeatures> frames_;  // frames of the event in progress, from its first frame on
     std::vector<bool> mask_;             // true where the matching frame was active
 };

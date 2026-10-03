@@ -13,6 +13,16 @@ EventDetector::EventDetector(int sampleRate) : frameSec_(static_cast<double>(kFr
 
 void EventDetector::Push(const FrameFeatures& f, double frameStartSec, std::vector<Event>* out) {
     const double frameEndSec = frameStartSec + frameSec_;
+
+    // Calibrate the noise floor from the first frames, so a hum that is already present when listening
+    // starts counts as background instead of one endless event.
+    if (warmupSeen_ < kWarmupFrames) {
+        warmupSumDb_ += f.levelDb;
+        if (++warmupSeen_ == kWarmupFrames) {
+            floorDb_ = std::max(kFloorMinDb, static_cast<float>(warmupSumDb_ / kWarmupFrames));
+        }
+        return;
+    }
     const bool active = f.levelDb > floorDb_ + kActiveMarginDb && f.tonality >= kTonalityMin;
 
     if (!active) {
@@ -33,7 +43,11 @@ void EventDetector::Push(const FrameFeatures& f, double frameStartSec, std::vect
             inactiveRun_ = kMinSegmentGapFrames;  // first active frame opens segment 1
             frames_.clear();
             mask_.clear();
+            eventLevelSumDb_ = 0.0;
+            eventLevelCount_ = 0;
         }
+        eventLevelSumDb_ += f.levelDb;
+        ++eventLevelCount_;
         if (inactiveRun_ >= kMinSegmentGapFrames) ++segments_;
         inactiveRun_ = 0;
         lastActiveEndSec_ = frameEndSec;
@@ -46,7 +60,13 @@ void EventDetector::Push(const FrameFeatures& f, double frameStartSec, std::vect
         if (frameEndSec - lastActiveEndSec_ >= kCloseSilenceSec) Close(out);
     }
 
-    if (inEvent_ && frameEndSec - startSec_ >= kMaxEventSec) Close(out);
+    if (inEvent_ && frameEndSec - startSec_ >= kMaxEventSec) {
+        // A sound that never stops is background after its first 10 s: raise the floor to its level so it
+        // does not re-trigger an event every 10 s. Louder sounds on top of it are still reported.
+        const float meanDb = static_cast<float>(eventLevelSumDb_ / std::max(1, eventLevelCount_));
+        Close(out);
+        floorDb_ = std::max(floorDb_, meanDb);
+    }
 }
 
 void EventDetector::Flush(std::vector<Event>* out) {

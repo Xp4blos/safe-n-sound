@@ -20,3 +20,4 @@
 /.claude/scheduled_tasks.lock
 /.superpowers
 /build-host
+/build-profile.json5

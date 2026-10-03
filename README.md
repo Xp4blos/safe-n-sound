@@ -13,6 +13,8 @@ stored audio; only compact sound fingerprints are saved.
   When a named sound is heard again the phone vibrates and shows a notification with its name.
 - Every detection vibrates; only named sounds with alerts on notify (at most once per 10 s per sound).
 - Listening works in the foreground only and stops when the app leaves the screen.
+- The phone's own vibration is picked up by its microphone, so events that start while it vibrates (plus a
+  short tail) are ignored; a hum that is already present when listening starts is treated as background.
 
 Not included yet: speech recognition, knock and loud-sound categories, background listening.
 
@@ -64,7 +66,9 @@ DevEco-bundled Node is 18, so `hvigorw` is called directly here. Switch to `deve
 available.
 
 Engine check on a WAV file (16-bit mono 16 kHz): `build-host\tests\wav_cli.exe file.wav` after running the
-host tests.
+host tests. To tune detection on real audio set `LOG_EVENT_FINGERPRINTS` to `true` in
+`entry/src/main/ets/services/AudioService.ets`, collect the `EVT` log lines and run
+`build-host\tests\fp_cli.exe lines.txt` to see each event's key fields and the pairwise similarity matrix.
 
 ## Logs
 

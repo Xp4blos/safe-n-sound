@@ -3,7 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { ServiceHub } from '../services/ServiceHub';
 
-const DOMAIN = 0x0000;
+const DOMAIN = 0x3201;
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -44,7 +44,7 @@ export default class EntryAbility extends UIAbility {
 
   onBackground(): void {
     // Foreground-only listening: release the microphone as soon as the app leaves the screen.
-    ServiceHub.audio?.stop();
+    ServiceHub.audio?.onBackground();
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
   }
 }

@@ -30,6 +30,8 @@ No MCP server was used for the product work.
 | 2026-10-03 | Claude Sonnet 5.5 | C++ engine (FFT analysis, event detector, fingerprint, matcher, facade, `wav_cli`) | `entry/src/main/cpp/engine`, `tools`, `tests` | 25 host unit tests on synthetic audio, written failing first; `wav_cli` run on a generated tone |
 | 2026-10-03 | Claude Sonnet 5.5 | NAPI bridge and native build wiring | `entry/src/main/cpp/napi`, `CMakeLists.txt`, `types/` | `.hap` built with `libsafensound.so`; synthetic-tone smoke run on a physical phone returned one tonal event |
 | 2026-10-03 | Claude Sonnet 5.5 | ArkTS model, services, UI | `entry/src/main/ets`, resources, manifest | 26 ArkTS unit tests; `.hap` builds; Listen and History tabs screenshotted on the phone |
+| 2026-10-03 | Fresh-context reviewer subagent (most capable model tier) | Whole-branch review | Review findings; fixes in the following commit | Reviewer read the full diff; each Critical/Important finding fixed test-first where testable |
+| 2026-10-03 | Claude Sonnet 5.5 | On-phone test and fixes | Detector warm-up and floor raise, vibration-feedback guard, `AudioService` stop/cancel/permission fixes, chart key fix, `fp_cli` | 28 C++ and 29 ArkTS tests; start, stop, Home button and beep-detection paths exercised on the phone |
 
 ## Workflow
 
@@ -43,8 +45,8 @@ Work followed the plan task by task on the `feature/sound-detection` branch, eac
 
 ### Testing and debugging
 
-- C++: `scripts\host-tests.cmd` (MSVC + SDK cmake/ninja), 25 tests.
-- ArkTS: `scripts/arkts-tests.sh` (hvigor + hypium), 26 tests.
+- C++: `scripts\host-tests.cmd` (MSVC + SDK cmake/ninja), 28 tests.
+- ArkTS: `scripts/arkts-tests.sh` (hvigor + hypium), 29 tests.
 - Build: `hvigorw assembleHap` succeeds.
 - Device: installed on a physical Huawei phone (PLR-AL00, API 26). A synthetic 1 kHz tone passed through the native library produced one tonal event; Listen and History screens were captured by screenshot.
 
@@ -53,10 +55,13 @@ Work followed the plan task by task on the `feature/sound-detection` branch, eac
 - The SDK's `clang++` cannot build host tests (no Windows C++ standard library); MSVC Build Tools are used instead.
 - `devecocli` requires Node 22+ and only Node 18 is installed, so `devecocli build`, `docs search` and `check lint` could not run; `hvigorw` was used directly with the user's approval, and the bundled ArkTS linter also failed under Node 18.
 - hilog domain `0x0000` produced no output on the test phone; domain `0x3201` is used.
+- First device run: after tapping Stop the Listen tab showed an error because the capturer's own `STOPPED` event was treated as a failure; fixed by ignoring events from a capturer that was already released.
+- First device run: a fixed -60 dB noise floor made room hum one endless event, and the phone's own vibration was heard by its microphone and re-detected as new sounds; fixed with a warm-up calibration, a floor raise after a 10 s event and a vibration-feedback guard.
+- Audio played from the PC (`[console]::Beep` and a WAV through the PC speakers) never produced a 2 kHz peak on the phone, so beep detection and same-sound matching were not demonstrated on real beeps.
 
 ## Known limitations
 
-- Microphone capture, the permission dialogs, live chart, naming dialog and notifications have not been exercised by the agent; they need the manual test on a device.
+- Exercised on the phone by the agent: both permission dialogs, start, live chart and pulsing mic, stop, Home button, History list. Not exercised: naming dialog, notification for a named sound, matching of a repeated real beep or doorbell, the denied-permission retry path, and cancelling a start by backgrounding mid-dialog.
 - Detection thresholds (`kTonalityMin`, `kActiveMarginDb`, `kMatchThreshold`) were tuned on synthetic audio only; real doorbells, smoke alarms and noisy rooms are untested.
 - Lint was not run (tool unavailable).
 - Foreground listening only; no speech, knock or loud-sound classes.

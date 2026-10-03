@@ -38,7 +38,7 @@ TEST(detector_full_scale_tone_is_detected) {
 }
 
 TEST(detector_separated_tones_are_two_events) {
-    const auto pcm = Concat({Tone(1000, 0.6, 0.3), Silence(2.0), Tone(1000, 0.6, 0.3), Silence(1.5)});
+    const auto pcm = Concat({Silence(0.5), Tone(1000, 0.6, 0.3), Silence(2.0), Tone(1000, 0.6, 0.3), Silence(1.5)});
     CHECK(RunDetector(pcm, false).size() == 2);
 }
 
@@ -46,4 +46,22 @@ TEST(detector_flush_emits_unclosed_event) {
     const auto pcm = Concat({Silence(0.3), Tone(1000, 1.0, 0.3)});
     CHECK(RunDetector(pcm, false).empty());
     CHECK(RunDetector(pcm, true).size() == 1);
+}
+
+// A tonal hum that is already there when listening starts (fan, appliance) is background, not an event.
+TEST(detector_steady_tone_present_from_the_start_is_background) {
+    CHECK(RunDetector(Concat({Tone(300, 30.0, 0.05), Silence(1.0)}), true).empty());
+}
+
+// ...but a clearly louder sound on top of that background is still reported.
+TEST(detector_loud_beep_over_steady_background_is_detected) {
+    const auto pcm = Concat({Tone(300, 8.0, 0.02), Tone(2000, 1.0, 0.5), Tone(300, 3.0, 0.02)});
+    const auto events = RunDetector(pcm, true);
+    CHECK(events.size() == 1);
+    if (events.size() == 1) CHECK_NEAR(events[0].startSec, 8.0, 0.3);
+}
+
+// A loud tonal sound that starts after calibration and never stops must not re-trigger every 10 s.
+TEST(detector_endless_tone_yields_one_event_not_one_per_ten_seconds) {
+    CHECK(RunDetector(Concat({Silence(1.0), Tone(1000, 40.0, 0.3)}), true).size() == 1);
 }

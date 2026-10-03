@@ -12,3 +12,6 @@ target_link_libraries(sns_tests PRIVATE sns_engine)
 
 add_executable(wav_cli ../tools/wav_cli.cpp)
 target_link_libraries(wav_cli PRIVATE sns_engine)
+
+add_executable(fp_cli ../tools/fp_cli.cpp)
+target_link_libraries(fp_cli PRIVATE sns_engine)
