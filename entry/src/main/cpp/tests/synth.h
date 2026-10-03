@@ -67,3 +67,16 @@ inline std::vector<int16_t> Impulses(double periodSec, double sec, double amp) {
     for (size_t i = 0; i < out.size(); i += step) out[i] = ToSample(amp);
     return out;
 }
+
+// Linear frequency sweep from f0 to f1 Hz over `sec` seconds.
+inline std::vector<int16_t> Sweep(double f0, double f1, double sec, double amp) {
+    const size_t n = static_cast<size_t>(std::llround(sec * kSynthRate));
+    std::vector<int16_t> out(n);
+    double phase = 0.0;
+    for (size_t i = 0; i < n; ++i) {
+        const double f = f0 + (f1 - f0) * static_cast<double>(i) / static_cast<double>(n);
+        phase += 2.0 * kSynthPi * f / kSynthRate;
+        out[i] = ToSample(amp * std::sin(phase));
+    }
+    return out;
+}
