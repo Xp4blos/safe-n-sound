@@ -299,7 +299,8 @@ struct Index {
       const take = await service.recordTake(TAKE_SECONDS);
       const outcome = service.checkTake(take);
       if (outcome === undefined || !outcome.ok) {
-        const bad: TakeStatus = { ok: false, message: outcome === undefined ? 'The microphone is not ready.' : outcome.message };
+        const reason = outcome === undefined ? 'The microphone is not ready.' : outcome.message.replace(/^recording \d+: /, '');
+        const bad: TakeStatus = { ok: false, message: reason };
         return bad;
       }
       this.takeBuffers.push(take);

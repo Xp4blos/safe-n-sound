@@ -1,40 +1,59 @@
 # Safe'n'Sound
 
-A HarmonyOS phone app that listens through the microphone and turns important everyday sounds
-(beeps, alarms, signals, door rings) into something you can see and feel: a vibration, an on-screen
-indicator and, for sounds you have named, a notification. Everything runs on the device. No cloud, no
-stored audio; only compact sound fingerprints are saved.
+A HarmonyOS phone app for deaf and hard-of-hearing people. The phone listens to its surroundings, detects
+signal sounds (beeps, buzzers, alarms, chimes), remembers them, lets you name them, and alerts you with
+vibration and a notification when a named sound is heard again. Everything runs on the device: no cloud,
+no stored audio. Only compact sound fingerprints (feature numbers) are saved.
 
-## What it does
+Core loop: **detect -> remember -> recognise repeat -> offer to name -> alert on named sound.**
+The app never relies on audio feedback: every state is visible on screen and every alert vibrates.
 
-- **Listen tab:** start/stop listening, a pulsing microphone that follows the live sound level, an
-  equaliser-style chart of the last 8 seconds, and the last detected sound.
-- **History tab:** every distinct sound heard so far. Tap one to name it and turn alerts on or off.
-  When a named sound is heard again the phone vibrates and shows a notification with its name.
-- Every detection vibrates; only named sounds with alerts on notify (at most once per 10 s per sound).
-- Listening works in the foreground only and stops when the app leaves the screen.
-- The phone's own vibration is picked up by its microphone, so events that start while it vibrates (plus a
-  short tail) are ignored; a hum that is already present when listening starts is treated as background.
+## Features
 
-Not included yet: speech recognition, knock and loud-sound categories, background listening.
+- **Listen tab:** tap the microphone (or the Start/Stop button) to listen. An 8-second live spectrum
+  (frequency bars over time) moves with the room sound and highlights the moments the phone reacted to.
+  A card shows the last detected sound; a large card appears when a named sound is heard.
+- **Remembering sounds:** a new tonal signal becomes an "Unknown sound" in History; the phone learns its
+  fingerprint from the audio around it (held in memory only). Hearing it again counts it on the same entry.
+- **"I've heard this sound before":** on the 2nd occurrence of an unnamed sound you are asked to name it
+  (Name it / Not now / Don't ask again), at most once per 10 minutes per sound.
+- **Teach a sound:** record 2-3 takes of a sound on purpose, see on screen whether each take was captured,
+  name it. If the takes differ too much you are told to repeat them.
+- **Alerts:** a named sound vibrates (3 long pulses), posts the notification "<Name> detected" with the
+  time and shows a card; 15 s cooldown per sound; each sound has an alert switch. Unknown sounds give one
+  short vibration.
+- **History / My sounds:** every sound with count, last time and a small pattern chart; details in plain
+  words (for example "High-pitched, 3 beeps per second, about 2.1 s long"), rename, alert switch, delete.
+- Data survives restarts. Room hum and the phone's own vibration are not detected as sounds.
+
+## Platform features used
+
+Audio capture (`AudioCapturer`, 16 kHz mono) with a runtime microphone permission and privacy text,
+vibrator, notifications (`notificationManager`), local storage (`Preferences`), NAPI (ArkTS <-> C++),
+`@kit.AbilityKit` lifecycle (listening stops when the app leaves the foreground).
 
 ## Architecture
 
 ```
-AudioCapturer (ArkTS) --PCM--> NAPI (libsafensound.so) --> C++ engine
-                                                          level, events + 29-float fingerprints
-ArkTS: SoundPipeline -> SoundCatalog (match, name, cooldown) -> SoundStore (Preferences JSON)
-       AlertService (vibrator, notifications)    UI: Listen / History tabs
+AudioCapturer (ArkTS) --PCM--> NAPI (libsafensound.so) --> SoundEngine (C++)
+                                  ambient::Detector (alarm + learned/taught sounds), ring buffer,
+                                  16-band live spectrum, SoundProfile, learn/train
+ArkTS: SoundPipeline -> SoundCatalog (occurrences, naming, cooldown, prompt rules) -> SoundStore (Preferences)
+       AlertService (vibrator, notifications)        UI: Listen / History / My sounds, dialogs
 ```
 
-- `entry/src/main/cpp/engine` - dependency-free C++ DSP: FFT frame analysis, adaptive-noise-floor event
-  detector (tonal and pulsed sounds), fingerprint and similarity matcher (`kMatchThreshold = 0.80`).
-- `entry/src/main/cpp/napi` - thin NAPI bridge (`createEngine`, `destroyEngine`, `process`,
-  `matchFingerprint`); typings in `entry/src/main/cpp/types/libsafensound`.
-- `entry/src/main/ets` - `model/` (pure logic), `services/` (audio, alerts, storage), `components/`, `pages/`.
-- Design and plan: `docs/superpowers/specs/` and `docs/superpowers/plans/`.
-
-Target: HarmonyOS phone, compatible SDK API 20, target SDK API 24.
+- `entry/src/main/cpp/ambient` - the team's sound engine (prior code, see below): FFT, alarm detector,
+  custom-sound spectrogram templates, trainer.
+- `entry/src/main/cpp/wrapper` - `SoundEngine`: ring buffer (last 10 s, memory only), live spectrum, learning
+  from a detected sound, teaching from takes, restoring stored sounds.
+- `entry/src/main/cpp/profile` - FFT frame analysis and `SoundProfile` (pitch, duration, repetition, modulation,
+  envelope) used for the plain-words description.
+- `entry/src/main/cpp/napi` - thin NAPI bridge; typings in `entry/src/main/cpp/types/libsafensound`.
+- `entry/src/main/ets` - `model/` (pure logic), `services/` (audio, pipeline, alerts, storage), `components/`, `pages/`.
+- Data flow: an `alarm` event is held for 3.7 s; if a stored sound explains it (a `custom` event) it is counted,
+  otherwise a new unknown sound is created and its template learned from the ring buffer. Only templates and
+  profile numbers are stored (as base64 in Preferences JSON); raw audio never leaves memory.
+- Design and plans: `docs/superpowers/specs/` and `docs/superpowers/plans/`.
 
 ## Required tools
 
@@ -43,12 +62,12 @@ Target: HarmonyOS phone, compatible SDK API 20, target SDK API 24.
 | DevEco Studio | 6.1.1.280 | HarmonyOS SDK, `hvigorw`, `ohpm`, `hdc`, emulator |
 | HarmonyOS SDK | target 6.1.1(24), compatible 6.0.0(20) (API 20 minimum) | building the app |
 | Node.js | 22 or newer | `devecocli` (build, lint); DevEco's bundled Node 18 runs `hvigorw` |
-| Visual Studio 2022 Build Tools (MSVC) | 17.x | C++ engine tests on the PC (optional) |
+| Visual Studio 2022 Build Tools (MSVC) | 17.x | C++ tests on the PC (optional) |
 
 ## Setup from a clean checkout
 
-1. Install the tools above and put DevEco's `tools\hvigorin`, `tools\ohpmin` and the SDK's
-   `openharmony	oolchains` (`hdc`) on `PATH`.
+1. Install the tools above and put DevEco's `tools\hvigor\bin`, `tools\ohpm\bin` and the SDK's
+   `openharmony\toolchains` (`hdc`) on `PATH`.
 2. `git clone <repo> && cd safe_n_sound && ohpm install --all`
 3. Signing: `build-profile.json5` is committed with an empty `signingConfigs`, so a fresh clone builds an
    **unsigned** `.hap` (`entry-default-unsigned.hap`). To run on a device or emulator you need a **signed**
@@ -57,10 +76,10 @@ Target: HarmonyOS phone, compatible SDK API 20, target SDK API 24.
    DevEco writes your personal signing data into `build-profile.json5`. Keep it out of commits with
    `git update-index --skip-worktree build-profile.json5`.
 
-## Build, test, install
+## Build, test, install, run
 
 ```bash
-# C++ engine tests on the PC (MSVC + the SDK's cmake/ninja; set DEVECO_NATIVE if the SDK is elsewhere)
+# C++ tests on the PC (MSVC + the SDK's cmake/ninja; set DEVECO_NATIVE if the SDK is elsewhere)
 scripts\host-tests.cmd
 
 # ArkTS unit tests (hvigor + hypium)
@@ -68,22 +87,49 @@ bash scripts/arkts-tests.sh
 
 # Build the .hap -> entry/build/default/outputs/default/entry-default-signed.hap
 hvigorw assembleHap --mode module -p product=default -p module=entry@default --no-daemon
+# (equivalent with Node 22+: devecocli build)
+
+# Lint (Node 22+)
+devecocli check lint .
 
 # Install and launch on a connected device or emulator
 hdc install -r entry/build/default/outputs/default/entry-default-signed.hap
 hdc shell aa start -a EntryAbility -b com.example.safe_n_sound
 ```
 
-`devecocli build` is the project's preferred build command, but `devecocli` needs Node 22 or newer and the
-DevEco-bundled Node is 18, so `hvigorw` is called directly here. Switch to `devecocli build` once Node 22+ is
-available.
+On first start the app asks for notification permission and the microphone permission (with a privacy
+explanation). If you deny the microphone, the Listen tab explains why it is needed and the next try opens the
+system Settings page.
 
-Engine check on a WAV file (16-bit mono 16 kHz): `build-host\tests\wav_cli.exe file.wav` after running the
-host tests. To tune detection on real audio set `LOG_EVENT_FINGERPRINTS` to `true` in
-`entry/src/main/ets/services/AudioService.ets`, collect the `EVT` log lines and run
-`build-host\tests\fp_cli.exe lines.txt` to see each event's key fields and the pairwise similarity matrix.
+## How to trigger a detection for a demo
 
-## Logs
+The detector reacts to **tonal signals of 0.4 s or longer between 800 and 4500 Hz** (smoke-alarm and appliance
+beeps, door chimes, buzzers). Use a second device or a speaker (not headphones) and hold it 10-30 cm from the
+phone's microphone in a quiet room; search the web for "smoke detector beep", "microwave beep" or a 2 kHz tone.
 
-App and native logs use hilog domain `0x3201` (domain `0x0000` is hidden on some devices):
-`hdc shell "hilog -x" | grep -a 3201`.
+1. Tap the microphone, allow the permissions, stay quiet for 2 seconds.
+2. Play the sound for 3-5 seconds: after about 4 seconds it appears in History as "Unknown sound".
+3. Play it again: the "I've heard this sound before" dialog appears; tap Name it and call it "Doorbell".
+4. Play it a third time: the phone vibrates, shows the "Doorbell detected" notification and card, and
+   History shows the same entry with count 3.
+5. For a sound shorter than 0.4 s, use **Teach a sound** on the Listen tab instead.
+
+## Known limitations
+
+- Listening stops when the app goes to the background or the screen locks (foreground only).
+- Detection thresholds come from the team's engine and were tuned on few sounds; sounds shorter than 0.4 s,
+  very quiet sounds, and sounds outside 800-4500 Hz are not detected automatically (Teach covers them).
+- Knocks and loud sounds are not reported (the phone's own vibration would be classed as one).
+- Keyword detection ("Help!", "Watch out!", "Ratunku!") is roadmap only; the engine contains keyword logic
+  but no speech recogniser is bundled.
+- English UI only. Lint reports 5 style warnings (prefer `@Builder` over small components).
+
+## Prior code and AI use
+
+- `entry/src/main/cpp/ambient` is prior code written by a member of the team for this hackathon
+  (https://github.com/Xp4blos/hack-yeah-2026, commit `512e41d`), included without `speech.*`; it has no license
+  file yet. See `entry/src/main/cpp/ambient/README.md`.
+- No third-party open-source code is bundled besides the HarmonyOS SDK, hypium/hamock test libraries (installed
+  by `ohpm`) and the DevEco toolchain.
+- AI assistants were used throughout; see `AI_WORKFLOW.md` for tools, prompts, validation and the bugs found
+  during phone testing.

@@ -21,26 +21,29 @@ The user owns the decisions recorded here. Unresolved fields may remain blank; d
 
 ## Intended user flow
 
-1. Open the app and tap Start listening (the microphone permission and notification permission are requested).
-2. The Listen tab shows a pulsing microphone and an 8-second level chart; any detected beep, alarm, signal or door ring vibrates the phone and appears as the last detected sound.
-3. In the History tab, tap a heard sound and give it a name, such as "Doorbell".
-4. When that named sound is heard again, the phone vibrates and shows a notification with its name.
+1. Open the app and tap the microphone or Start listening (microphone and notification permissions are requested).
+2. The Listen tab shows an 8-second live spectrum; a detected signal sound appears in History as "Unknown sound".
+3. When it is heard again the app asks "I've heard this sound before. Do you want to name it?"; the user names it.
+4. When the named sound is heard again the phone vibrates, shows a notification "<Name> detected" and a card.
+5. "Teach a sound" records 2-3 takes of a sound on purpose and saves it under a name.
+6. History shows every sound with details in plain words; My sounds lists the named sounds with alert switches.
 
 ## Acceptance checks
 
-- [ ] A beep or alarm played near the phone is detected and the phone vibrates
-- [ ] The same sound heard again is recognised as the same entry in History (times heard increases)
-- [ ] A named sound produces a notification with its name when heard again, at most once per 10 seconds
-- [ ] History and names survive restarting the app
-- [ ] Denying the microphone permission shows a clear message and nothing crashes
-- [ ] Sending the app to the background releases the microphone
+- [ ] The live view moves with room sound (verified on the phone)
+- [ ] A real beep or doorbell appears in History as "Unknown sound"
+- [ ] Playing it again shows the naming prompt; naming it works
+- [ ] A third time vibrates, notifies "<Name> detected" and counts on the same entry
+- [ ] A taught sound alerts under its own name and is not confused with the first
+- [ ] Room hum, speech and the phone's own vibration create no entries
+- [ ] Named sounds are still there after restarting the app
 
-None of these has been confirmed by the user yet.
+Only the first check has been confirmed on a phone so far.
 
 ## Scope boundaries
 
-- In scope: detecting beeps, alarms, signals and door rings from amplitude, frequency and dynamics; remembering sounds by fingerprint; sound history; naming sounds; vibration and notification alerts; foreground listening; Listen and History tabs.
-- Out of scope: speech recognition, knock and loud-sound categories, background listening, cloud services, audio storage (all deferred by the user for later).
+- In scope: detecting signal sounds (beeps, buzzers, alarms, chimes); remembering them by fingerprint; history; naming; teaching sounds; vibration and notification alerts; foreground listening; Listen, History and My sounds tabs; live spectrum.
+- Out of scope: keyword detection in several languages, knock and loud-sound categories, background listening, cloud services, audio storage (all deferred by the user for later).
 - Mocked or simulated behavior: None in the product. Unit tests and the native smoke check use synthetic audio.
 
 ## First-minute narrative

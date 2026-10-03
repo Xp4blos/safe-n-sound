@@ -9,8 +9,8 @@
 namespace sns {
 
 namespace {
-constexpr float kBandFloorDb = -75.0f;
-constexpr float kBandCeilDb = -15.0f;
+constexpr float kBandFloorDb = -62.0f;  // quiet room noise stays dim ...
+constexpr float kBandCeilDb = -12.0f;   // ... and a clear sound lights its band fully
 
 ambient::Config MakeConfig(int sampleRate) {
     ambient::Config c;
