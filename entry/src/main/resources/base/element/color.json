@@ -3,6 +3,38 @@
     {
       "name": "start_window_background",
       "value": "#FFFFFF"
+    },
+    {
+      "name": "page_bg",
+      "value": "#F4F7FB"
+    },
+    {
+      "name": "surface",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "on_surface",
+      "value": "#1B2733"
+    },
+    {
+      "name": "muted",
+      "value": "#5E6C7A"
+    },
+    {
+      "name": "accent",
+      "value": "#2F6FDE"
+    },
+    {
+      "name": "accent_soft",
+      "value": "#DCE8FD"
+    },
+    {
+      "name": "on_accent",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "danger",
+      "value": "#C9352B"
     }
   ]
 }

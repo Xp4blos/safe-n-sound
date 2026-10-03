@@ -2,19 +2,135 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "module description"
+      "value": "Safe'n'Sound main module"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "description"
+      "value": "Turns important sounds around you into vibration and notifications"
     },
     {
       "name": "EntryAbility_label",
-      "value": "label"
+      "value": "Safe'n'Sound"
     },
     {
       "name": "mic_reason",
       "value": "Safe'n'Sound listens through the microphone to detect alarms, beeps and door rings. Audio is analysed on this device only and is never stored or sent anywhere."
+    },
+    {
+      "name": "tab_listen",
+      "value": "Listen"
+    },
+    {
+      "name": "tab_history",
+      "value": "History"
+    },
+    {
+      "name": "btn_start",
+      "value": "Start listening"
+    },
+    {
+      "name": "btn_stop",
+      "value": "Stop listening"
+    },
+    {
+      "name": "btn_retry",
+      "value": "Allow microphone and retry"
+    },
+    {
+      "name": "state_idle",
+      "value": "Not listening"
+    },
+    {
+      "name": "state_starting",
+      "value": "Starting…"
+    },
+    {
+      "name": "state_listening",
+      "value": "Listening"
+    },
+    {
+      "name": "state_permission_denied",
+      "value": "Microphone access is needed to hear sounds. Nothing is recorded or sent anywhere."
+    },
+    {
+      "name": "state_error",
+      "value": "Listening stopped unexpectedly. Tap to try again."
+    },
+    {
+      "name": "chart_caption_start",
+      "value": "8 s ago"
+    },
+    {
+      "name": "chart_caption_end",
+      "value": "now"
+    },
+    {
+      "name": "last_detected",
+      "value": "Last detected"
+    },
+    {
+      "name": "nothing_yet",
+      "value": "No sound detected yet"
+    },
+    {
+      "name": "notifications_off",
+      "value": "Notifications are off, so named sounds will only vibrate."
+    },
+    {
+      "name": "sound_default_name",
+      "value": "Sound #%d"
+    },
+    {
+      "name": "sound_new_suffix",
+      "value": "New"
+    },
+    {
+      "name": "kind_tonal",
+      "value": "Beep or alarm"
+    },
+    {
+      "name": "kind_pulsed",
+      "value": "Repeated beeps or ring"
+    },
+    {
+      "name": "heard_times",
+      "value": "Heard %d times"
+    },
+    {
+      "name": "last_seen",
+      "value": "Last heard %s"
+    },
+    {
+      "name": "at_time",
+      "value": "at %s"
+    },
+    {
+      "name": "empty_history",
+      "value": "Heard sounds will appear here. Start listening, then tap a sound to name it."
+    },
+    {
+      "name": "dialog_title",
+      "value": "Name this sound"
+    },
+    {
+      "name": "dialog_name_hint",
+      "value": "For example: Doorbell"
+    },
+    {
+      "name": "dialog_alerts",
+      "value": "Notify me when heard again"
+    },
+    {
+      "name": "btn_save",
+      "value": "Save"
+    },
+    {
+      "name": "btn_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "alerts_label",
+      "value": "Alerts"
     }
   ]
 }
