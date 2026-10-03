@@ -36,13 +36,26 @@ ArkTS: SoundPipeline -> SoundCatalog (match, name, cooldown) -> SoundStore (Pref
 
 Target: HarmonyOS phone, compatible SDK API 20, target SDK API 24.
 
+## Required tools
+
+| Tool | Version used | Needed for |
+| --- | --- | --- |
+| DevEco Studio | 6.1.1.280 | HarmonyOS SDK, `hvigorw`, `ohpm`, `hdc`, emulator |
+| HarmonyOS SDK | target 6.1.1(24), compatible 6.0.0(20) (API 20 minimum) | building the app |
+| Node.js | 22 or newer | `devecocli` (build, lint); DevEco's bundled Node 18 runs `hvigorw` |
+| Visual Studio 2022 Build Tools (MSVC) | 17.x | C++ engine tests on the PC (optional) |
+
 ## Setup from a clean checkout
 
-1. Install DevEco Studio 6.1.x with the HarmonyOS SDK and put its tools on `PATH` (`hvigorw`, `ohpm`,
-   `hdc`, DevEco's `node`). For the host C++ tests also install Visual Studio 2022 Build Tools (MSVC).
-2. Copy `build-profile.example.json5` to `build-profile.json5` and set up signing (see the comments in
-   that file). `build-profile.json5` holds personal signing secrets and is git-ignored on purpose.
-3. `ohpm install --all`
+1. Install the tools above and put DevEco's `tools\hvigorin`, `tools\ohpmin` and the SDK's
+   `openharmony	oolchains` (`hdc`) on `PATH`.
+2. `git clone <repo> && cd safe_n_sound && ohpm install --all`
+3. Signing: `build-profile.json5` is committed with an empty `signingConfigs`, so a fresh clone builds an
+   **unsigned** `.hap` (`entry-default-unsigned.hap`). To run on a device or emulator you need a **signed**
+   build: open the project in DevEco Studio, choose File > Project Structure > Signing Configs >
+   "Automatically generate signature" (device or emulator connected, Huawei ID signed in), then build again.
+   DevEco writes your personal signing data into `build-profile.json5`. Keep it out of commits with
+   `git update-index --skip-worktree build-profile.json5`.
 
 ## Build, test, install
 
