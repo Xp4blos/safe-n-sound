@@ -126,8 +126,9 @@ bound to the bundle `com.example.safe_n_sound` and to the devices that were regi
 is valid for about two weeks (the profile of the submitted build: 2026-10-03 to 2026-10-17, one registered device).
 So the package installs on that phone only; to install it on another phone or an emulator, repeat step 2 with that
 device connected and rebuild. Publishing to other users would need a release certificate and profile from AppGallery
-Connect, which this project does not have. The `.hap` files are not in the repository (the profile inside contains
-the registered device's ID); `dist/` is git-ignored.
+Connect, which this project does not have. The `.hap` files are not committed to the repository; the signed release
+build is attached to the GitHub release [v1.0.0](https://github.com/Xp4blos/safe-n-sound/releases/tag/v1.0.0) (note that
+the profile inside it contains the registered device's ID). `dist/` is git-ignored.
 
 ## How to trigger a detection for a demo
 
