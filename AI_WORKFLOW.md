@@ -98,3 +98,9 @@ Work followed written plans, task by task and test first, with small commits on 
 ## AI feature disclosure
 
 Not applicable as a model: the app uses classical signal processing (FFT, thresholds, spectrogram templates, similarity) on the device and contains no machine-learning model or AI service.
+
+### Complex signals (several notes, pitches, spacings and dynamics)
+- Asked by the user to try more complex signals. Added `tests/complex_sounds.h` and `tools/complex_eval.cpp` (five synthetic signals mixed into real phone room noise) and WAV export for playback.
+- Result in simulation: all five signals are detected, taught, recognised (3/3 at 10-25 dB) and not confused. Result on the phone with a PC speaker (audio captured with `DEBUG_CAPTURE_AUDIO`, then replayed on the PC): only the tremolo tone could be taught; chime 1 was not even reported as an alarm, and the trainer rejected the pairs of takes of chime, siren, arpeggio and the irregular pattern (similarity -0.00, 0.08, 0.58, 0.60 against 0.6).
+- Tried a lower gate tonality threshold (18, 14, 10): no improvement, so the value stays 25. The cause is in how the team's trainer compares takes of multi-note, reverberated sounds, not in level (the plays were 15-28 dB above the room noise). Not fixed; recorded as a limitation.
+- Lesson: a synthetic test with recorded noise is not a substitute for a real speaker-and-room test; both are kept.

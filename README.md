@@ -103,14 +103,25 @@ system Settings page.
 
 ## Engine checks on real audio
 
-`build-host	ests\wav_cli.exe file.wav` (built by `scripts\host-tests.cmd`) runs the team's detector on a WAV file, and
-`build-host	ests
-eplay_cli.exe recording.wav [threshold]` replays a recording through the same `SoundEngine` the app
+`build-host\tests\wav_cli.exe file.wav` (built by `scripts\host-tests.cmd`) runs the team's detector on a WAV file, and
+`build-host\tests\replay_cli.exe recording.wav [threshold]` replays a recording through the same `SoundEngine` the app
 uses: it learns the first alarm and prints every alarm and every recognition. To record audio on the phone, set
 `DEBUG_CAPTURE_AUDIO` to `true` in `entry/src/main/ets/services/AudioService.ets`; the app then writes
 `debug_capture.pcm` (16 kHz mono 16-bit) into its files folder, which can be pulled with `hdc file recv`.
 `entry/src/main/cpp/tests/data/phone_alarm_3x.wav` is such a recording (three plays of an alarm in a noisy room) and a
 unit test checks that the first play is learned and the other two are recognised.
+
+### Complex signals
+
+`build-host\tests\complex_eval.exe` (run from the repository root) mixes five synthetic multi-note signals (a decaying two-note
+chime, a rising arpeggio that gets louder, a two-tone siren, an irregular pattern of notes with uneven gaps, and a
+tremolo tone) into real room noise from the phone recording at 25/20/15/10 dB above the noise. In that setup every
+signal is detected, taught from two takes, recognised 3 of 3 times at every level, and never mistaken for another one.
+`complex_eval.exe --export <dir>` writes the signals as WAV files for playback tests, and
+`complex_eval.exe --takes <phone.wav> <start s>...` cuts 6 s takes from a phone recording and runs the Teach checks.
+Played through a PC speaker and recorded by the phone in a real room the picture is worse: of five signals only the
+tremolo tone could be taught from two takes (the takes of the chime, siren, arpeggio and irregular pattern were judged
+too different from each other, similarity -0.00 to 0.60 against a 0.6 limit). See the limitations below.
 
 ## Signed .hap
 
@@ -168,6 +179,9 @@ to the GitHub release: https://github.com/Xp4blos/safe-n-sound/releases/tag/v1.0
 - Detection thresholds come from the team's engine; the similarity needed to recognise a learned sound again is 0.6
   (the engine default 0.8 missed quieter real repeats), tuned on recordings of one alarm sound in one noisy room; sounds shorter than 0.4 s,
   very quiet sounds, and sounds outside 800-4500 Hz are not detected automatically (Teach covers them).
+- Complex multi-note sounds (decaying chimes, two-tone sirens, irregular note patterns) are detected, but teaching them
+  from two takes often fails on real speaker-and-room audio because the takes are judged too different; simple tones and
+  tremolo tones work. Teaching from three takes or a quieter room may help (untested).
 - Knocks and loud sounds are not reported (the phone's own vibration would be classed as one).
 - Keyword detection ("Help!", "Watch out!", "Ratunku!") is roadmap only; the engine contains keyword logic
   but no speech recogniser is bundled.

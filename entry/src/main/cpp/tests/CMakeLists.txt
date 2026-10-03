@@ -25,3 +25,7 @@ target_link_libraries(wav_cli PRIVATE ambient_core)
 
 add_executable(replay_cli ../tools/replay_cli.cpp)
 target_link_libraries(replay_cli PRIVATE sns_wrapper)
+
+add_executable(complex_eval ../tools/complex_eval.cpp)
+target_include_directories(complex_eval PRIVATE ../tests)
+target_link_libraries(complex_eval PRIVATE sns_wrapper)
