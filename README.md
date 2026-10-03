@@ -68,7 +68,7 @@ ArkTS: SoundPipeline -> SoundCatalog (occurrences, naming, cooldown, prompt rule
 
 1. Install the tools above and put DevEco's `tools\hvigor\bin`, `tools\ohpm\bin` and the SDK's
    `openharmony\toolchains` (`hdc`) on `PATH`.
-2. `git clone <repo> && cd safe_n_sound && ohpm install --all`
+2. `git clone https://github.com/Xp4blos/safe-n-sound.git && cd safe-n-sound && ohpm install --all`
 3. Signing: `build-profile.json5` is committed with an empty `signingConfigs`, so a fresh clone builds an
    **unsigned** `.hap` (`entry-default-unsigned.hap`). To run on a device or emulator you need a **signed**
    build: open the project in DevEco Studio, choose File > Project Structure > Signing Configs >
