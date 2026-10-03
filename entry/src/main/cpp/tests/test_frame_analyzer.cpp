@@ -1,6 +1,6 @@
 #include <numeric>
 
-#include "../engine/frame_analyzer.h"
+#include "../profile/frame_analyzer.h"
 #include "synth.h"
 #include "test_util.h"
 

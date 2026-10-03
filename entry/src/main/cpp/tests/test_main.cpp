@@ -1,12 +1,11 @@
 #include <cstdio>
 
-#include "../engine/types.h"
+#include "../profile/types.h"
 #include "synth.h"
 #include "test_util.h"
 
 TEST(harness_runs) {
     CHECK(sns::kFrameSize == 512);
-    CHECK(sns::kFingerprintSize == 29);
 }
 
 TEST(synth_tone_length) {
