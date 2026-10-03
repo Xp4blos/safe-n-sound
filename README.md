@@ -119,9 +119,13 @@ tremolo tone) into real room noise from the phone recording at 25/20/15/10 dB ab
 signal is detected, taught from two takes, recognised 3 of 3 times at every level, and never mistaken for another one.
 `complex_eval.exe --export <dir>` writes the signals as WAV files for playback tests, and
 `complex_eval.exe --takes <phone.wav> <start s>...` cuts 6 s takes from a phone recording and runs the Teach checks.
-Played through a PC speaker and recorded by the phone in a real room the picture is worse: of five signals only the
-tremolo tone could be taught from two takes (the takes of the chime, siren, arpeggio and irregular pattern were judged
-too different from each other, similarity -0.00 to 0.60 against a 0.6 limit). See the limitations below.
+Played through a PC speaker and recorded by the phone in a real room the picture is harder: broadband room noise
+hides the quiet notes and the trainer's cut differed from take to take. Measured on 25 recordings (5 plays of each
+signal, `complex_eval.exe --takes`): teaching from two takes works for 46 of 50 pairs (29 of 50 before the gate was
+changed to 8 dB above the background) and from three takes for 50 of 50 triples, because one take that disagrees with the
+others is left out. After teaching each sound from its first three plays, 24 of the 25 plays in the recording were
+recognised under the right name, none under a wrong one (`complex_eval.exe --recog`). On the phone, three complex sounds
+(chime, arpeggio, irregular pattern) were taught from two takes each and each alerted under its own name twice.
 
 ## Signed .hap
 
@@ -179,9 +183,9 @@ to the GitHub release: https://github.com/Xp4blos/safe-n-sound/releases/tag/v1.0
 - Detection thresholds come from the team's engine; the similarity needed to recognise a learned sound again is 0.6
   (the engine default 0.8 missed quieter real repeats), tuned on recordings of one alarm sound in one noisy room; sounds shorter than 0.4 s,
   very quiet sounds, and sounds outside 800-4500 Hz are not detected automatically (Teach covers them).
-- Complex multi-note sounds (decaying chimes, two-tone sirens, irregular note patterns) are detected, but teaching them
-  from two takes often fails on real speaker-and-room audio because the takes are judged too different; simple tones and
-  tremolo tones work. Teaching from three takes or a quieter room may help (untested).
+- Complex multi-note sounds are detected and can be taught, but in a noisy room two takes occasionally disagree
+  (4 of 50 pairs in the recordings above); a third take lets the app leave the odd one out. One of 25 plays of an
+  irregular pattern was not recognised afterwards.
 - Knocks and loud sounds are not reported (the phone's own vibration would be classed as one).
 - Keyword detection ("Help!", "Watch out!", "Ratunku!") is roadmap only; the engine contains keyword logic
   but no speech recogniser is bundled.

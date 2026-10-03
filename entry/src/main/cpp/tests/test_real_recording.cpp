@@ -84,3 +84,47 @@ TEST(real_phone_takes_of_one_sound_can_be_taught) {
     CHECK(taught.profile.beepCount == 2);
     CHECK_NEAR(taught.profile.dominantHz, 1800.0, 60.0);
 }
+
+// Three 6 s takes of a rising four-note arpeggio (loudness also rises) played from a PC speaker in a noisy room.
+// Takes 1 and 3 agree with each other; take 2 is cut differently by the trainer (the quiet first notes are lost in the
+// noise) and agrees with neither. Teaching must use the two that agree instead of rejecting the lot.
+TEST(real_phone_takes_with_one_odd_one_out_are_taught_from_the_two_that_agree) {
+    std::vector<int16_t> pcm;
+    const bool loaded = LoadWav("entry/src/main/cpp/tests/data/phone_arpeggio_3takes.wav", &pcm);
+    CHECK(loaded);
+    if (!loaded || pcm.size() != 288000) return;
+    std::vector<std::vector<int16_t>> takes;
+    for (size_t i = 0; i < 3; ++i) takes.emplace_back(pcm.begin() + i * 96000, pcm.begin() + (i + 1) * 96000);
+
+    sns::SoundEngine engine(sns::kSampleRate);
+    const auto taught = engine.TrainFromTakes("snd-7", takes);
+    CHECK(taught.ok);
+    if (!taught.ok) std::printf("    teach failed: %s\n", taught.message.c_str());
+    CHECK(taught.droppedTake == 1);  // the middle take was left out
+}
+
+TEST(two_takes_that_disagree_are_still_rejected) {
+    std::vector<int16_t> pcm;
+    const bool loaded = LoadWav("entry/src/main/cpp/tests/data/phone_arpeggio_3takes.wav", &pcm);
+    CHECK(loaded);
+    if (!loaded || pcm.size() != 288000) return;
+    const std::vector<int16_t> good(pcm.begin(), pcm.begin() + 96000);
+    const std::vector<int16_t> odd(pcm.begin() + 96000, pcm.begin() + 192000);
+    sns::SoundEngine engine(sns::kSampleRate);
+    CHECK(!engine.TrainFromTakes("snd-8", {good, odd}).ok);  // with two takes there is no majority to trust
+}
+
+// Two takes of an irregular pattern (2 kHz short loud, 3 kHz long soft, 1.5 kHz medium, uneven gaps) from a PC speaker
+// in a noisy room. The soft middle note is only a few dB above the room; a gate that demands 12 dB cut it out of one
+// take and not the other, so the takes were judged different (similarity 0.52).
+TEST(real_phone_takes_of_an_irregular_note_pattern_can_be_taught) {
+    std::vector<int16_t> pcm;
+    const bool loaded = LoadWav("entry/src/main/cpp/tests/data/phone_irregular_2takes.wav", &pcm);
+    CHECK(loaded);
+    if (!loaded || pcm.size() != 192000) return;
+    const std::vector<int16_t> a(pcm.begin(), pcm.begin() + 96000), b(pcm.begin() + 96000, pcm.end());
+    sns::SoundEngine engine(sns::kSampleRate);
+    const auto taught = engine.TrainFromTakes("snd-6", {a, b});
+    CHECK(taught.ok);
+    if (!taught.ok) std::printf("    teach failed: %s\n", taught.message.c_str());
+}

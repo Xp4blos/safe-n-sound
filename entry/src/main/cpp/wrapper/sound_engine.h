@@ -42,6 +42,7 @@ struct LearnResult {
     std::vector<uint8_t> templateBytes;  // serialised custom sound (feature numbers, not audio)
     SoundProfile profile;
     float consistency = 1.0f;
+    int droppedTake = -1;                // index of a take left out because it disagreed with the others, or -1
 };
 
 // Application layer over ambient::Detector. Not thread safe: call from one thread (the JS thread).

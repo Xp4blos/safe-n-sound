@@ -34,7 +34,7 @@ constexpr double kGateMinSoundSec = 0.25;
 constexpr float kGateTonality = 25.0f;   // room hum has 15-35, a clear tone 30-75
 constexpr float kGateMinHz = 600.0f;     // below this it is mostly hum and rumble
 constexpr float kGateMaxHz = 6000.0f;
-constexpr float kGateAboveBackgroundDb = 12.0f;
+constexpr float kGateAboveBackgroundDb = 8.0f;   // 12 cut quiet notes of multi-note sounds out of some takes only
 
 std::vector<int16_t> GateToTonalSound(const std::vector<int16_t>& take, int sampleRate,
                                       double marginSec = kGateMarginSec) {
@@ -208,9 +208,37 @@ LearnResult SoundEngine::TrainFromTakes(const std::string& label, const std::vec
     }
     std::vector<std::vector<int16_t>> gated;
     for (const auto& t : takes) gated.push_back(GateToTonalSound(t, sampleRate_));
-    const std::vector<int16_t> core = GateToTonalSound(takes[0], sampleRate_, 0.0);
-    const SoundProfile profile = DescribeSound(core.data(), core.size(), sampleRate_);
-    return Train(label, AsRecordings(gated), profile, true);
+    const auto profileOf = [&](size_t i) {
+        const std::vector<int16_t> core = GateToTonalSound(takes[i], sampleRate_, 0.0);
+        return DescribeSound(core.data(), core.size(), sampleRate_);
+    };
+    const auto recordingsWithout = [&](size_t skip) {
+        std::vector<std::vector<int16_t>> kept;
+        for (size_t i = 0; i < gated.size(); ++i)
+            if (i != skip) kept.push_back(gated[i]);
+        return kept;
+    };
+
+    LearnResult all = Train(label, AsRecordings(gated), profileOf(0), true);
+    if (all.ok || takes.size() < 3) return all;
+
+    // One take that does not fit (a noise burst, a missed note) must not ruin the others: with three or more takes
+    // the best set that leaves one out is used, provided the rest agree with each other.
+    int bestSkip = -1;
+    float bestConsistency = -1.0f;
+    for (size_t skip = 0; skip < gated.size(); ++skip) {
+        const auto kept = recordingsWithout(skip);
+        const LearnResult trial = Train(label, AsRecordings(kept), SoundProfile{}, false);
+        if (trial.ok && trial.consistency > bestConsistency) {
+            bestConsistency = trial.consistency;
+            bestSkip = static_cast<int>(skip);
+        }
+    }
+    if (bestSkip < 0) return all;
+    const auto kept = recordingsWithout(static_cast<size_t>(bestSkip));
+    LearnResult r = Train(label, AsRecordings(kept), profileOf(bestSkip == 0 ? 1 : 0), true);
+    if (r.ok) r.droppedTake = bestSkip;
+    return r;
 }
 
 LearnResult SoundEngine::CheckTake(const std::vector<int16_t>& take) {

@@ -85,6 +85,48 @@ void WriteWav(const std::string& path, const std::vector<double>& sig) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    // --recog <wav> <25 onsets, 5 per sound in All() order>: teaches every sound from its first three plays (cut like
+    // Teach takes), replays the whole recording and prints which learned sound fired after each of the 25 plays.
+    if (argc == 28 && std::strcmp(argv[1], "--recog") == 0) {
+        std::vector<int16_t> rec;
+        if (!LoadWav(argv[2], &rec)) return 1;
+        const auto& snds = All();
+        std::vector<double> on;
+        for (int i = 3; i < 28; ++i) on.push_back(std::atof(argv[i]));
+        sns::SoundEngine engine(sns::kSampleRate);
+        for (size_t k = 0; k < snds.size(); ++k) {
+            std::vector<std::vector<int16_t>> takes;
+            for (size_t j = 0; j < 3; ++j) {
+                const long from = std::lround((on[k * 5 + j] - 1.2) * 16000.0);
+                takes.emplace_back(rec.begin() + from, rec.begin() + from + 96000);
+            }
+            const auto t = engine.TrainFromTakes(snds[k].name, takes);
+            std::printf("taught %-9s %s dropped=%d %s\n", snds[k].name, t.ok ? "ok" : "FAILED", t.droppedTake, t.message.c_str());
+        }
+        std::vector<std::pair<double, std::string>> fired;
+        for (size_t pos = 0; pos < rec.size(); pos += 480) {
+            const auto out = engine.Process(rec.data() + pos, std::min<size_t>(480, rec.size() - pos));
+            for (const auto& e : out.events)
+                if (e.type == "custom") fired.emplace_back(static_cast<double>(pos) / 16000.0, e.label);
+        }
+        int right = 0, missed = 0, wrong = 0;
+        for (size_t k = 0; k < snds.size(); ++k) {
+            std::printf("%-9s", snds[k].name);
+            for (size_t j = 0; j < 5; ++j) {
+                const double t0 = on[k * 5 + j];
+                std::string got;
+                for (const auto& f : fired)
+                    if (f.first >= t0 && f.first < t0 + 6.0) got += (got.empty() ? "" : "+") + f.second;
+                const bool taughtPlay = j < 3;
+                const char* mark = got == snds[k].name ? "ok" : got.empty() ? "MISS" : "WRONG";
+                if (got == snds[k].name) ++right; else if (got.empty()) ++missed; else ++wrong;
+                std::printf("  %s%s=%s", taughtPlay ? "T:" : "N:", mark, got.empty() ? "-" : got.c_str());
+            }
+            std::printf("\n");
+        }
+        std::printf("right %d, missed %d, wrong %d of 25 (T = a play used for teaching, N = a new play)\n", right, missed, wrong);
+        return 0;
+    }
     // --takes <wav> <startSec>...: cut 6 s takes (signal 1.2 s in) from a phone recording and run the Teach checks.
     if (argc > 3 && std::strcmp(argv[1], "--takes") == 0) {
         std::vector<int16_t> rec;
@@ -95,8 +137,19 @@ int main(int argc, char** argv) {
             const long from = std::lround((std::atof(argv[i]) - 1.2) * 16000.0);
             if (from < 0 || from + 96000 > static_cast<long>(rec.size())) continue;
             takes.emplace_back(rec.begin() + from, rec.begin() + from + 96000);
+            if (std::getenv("ORACLE_DUR")) {  // keep only [onset-0.4 s, onset+dur+0.4 s] of the take
+                const double dur = std::atof(std::getenv("ORACLE_DUR")) + (i % 2 ? 0.0 : 0.0);
+                const long keepFrom = std::lround((1.2 - 0.4) * 16000.0), keepTo = std::lround((1.2 + dur + 0.4) * 16000.0);
+                for (long k = 0; k < 96000; ++k) if (k < keepFrom || k > keepTo) takes.back()[static_cast<size_t>(k)] = 0;
+            }
             const auto r = engine.CheckTake(takes.back());
             std::printf("take at %s s: %s %s\n", argv[i], r.ok ? "ok" : "REJECTED", r.message.c_str());
+        }
+        if (std::getenv("ALL_TAKES")) {  // one training call with every take (the Teach flow with 2-3 takes)
+            const auto t = engine.TrainFromTakes("all", takes);
+            std::printf("train all %zu takes: %s dropped=%d %s\n", takes.size(), t.ok ? "ok" : "FAILED", t.droppedTake,
+                        t.message.c_str());
+            return 0;
         }
         for (size_t a = 0; a + 1 < takes.size(); a += 2) {
             const auto t = engine.TrainFromTakes("x" + std::to_string(a), {takes[a], takes[a + 1]});
