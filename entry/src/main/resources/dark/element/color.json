@@ -6,35 +6,55 @@
     },
     {
       "name": "page_bg",
-      "value": "#0E141B"
+      "value": "#0A0F18"
     },
     {
       "name": "surface",
-      "value": "#18212B"
+      "value": "#141C28"
     },
     {
       "name": "on_surface",
-      "value": "#E8EEF4"
+      "value": "#EAF1FA"
     },
     {
       "name": "muted",
-      "value": "#93A3B3"
+      "value": "#8EA0B8"
     },
     {
       "name": "accent",
-      "value": "#6EA2FF"
+      "value": "#4A86F5"
     },
     {
       "name": "accent_soft",
-      "value": "#1F3350"
+      "value": "#1E2F4D"
     },
     {
       "name": "on_accent",
-      "value": "#0E141B"
+      "value": "#FFFFFF"
     },
     {
       "name": "danger",
-      "value": "#FF7B72"
+      "value": "#FF6B70"
+    },
+    {
+      "name": "surface_alt",
+      "value": "#1B2636"
+    },
+    {
+      "name": "border",
+      "value": "#243246"
+    },
+    {
+      "name": "accent_end",
+      "value": "#7468F5"
+    },
+    {
+      "name": "success",
+      "value": "#2BD08F"
+    },
+    {
+      "name": "warn",
+      "value": "#F5A524"
     }
   ]
 }

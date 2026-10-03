@@ -19,7 +19,7 @@ No MCP server was used for the product work.
 
 ## Prior code and open-source disclosure
 
-- `entry/src/main/cpp/ambient/` is prior code written by a member of the team (https://github.com/Xp4blos/hack-yeah-2026, commit `512e41d`), vendored unchanged except that `speech.*` was left out. It has no license file yet.
+- `entry/src/main/cpp/ambient/` is prior code written by a member of the team (https://github.com/Xp4blos/hack-yeah-2026, commit `512e41d`), vendored unchanged except that `speech.*` was left out. It is the team's own work; the repository deliberately has no license file.
 - The first version of this project's own C++ detector and matcher (written with Claude in this session) was replaced by that engine; only its FFT frame analyzer is kept (`entry/src/main/cpp/profile`).
 - Third-party libraries: `@ohos/hypium` and `@ohos/hamock` (test tools, installed by `ohpm`), the HarmonyOS SDK and DevEco toolchain. No other open-source code is bundled.
 

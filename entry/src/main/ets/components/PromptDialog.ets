@@ -8,26 +8,29 @@ export struct PromptDialog {
 
   build() {
     Column({ space: 16 }) {
-      Text($r('app.string.prompt_title')).fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.on_surface'))
+      Text($r('app.string.prompt_title')).fontSize(22).fontWeight(FontWeight.Bold).fontColor($r('app.color.on_surface'))
       Text($r('app.string.prompt_text')).fontSize(16).fontColor($r('app.color.muted'))
 
-      Button($r('app.string.prompt_name'))
+      Button($r('app.string.prompt_name'), { type: ButtonType.Capsule })
+        .height(50)
         .width('100%')
-        .backgroundColor($r('app.color.accent'))
+        .linearGradient({ angle: 90, colors: [[$r('app.color.accent'), 0], [$r('app.color.accent_end'), 1]] })
         .fontColor($r('app.color.on_accent'))
         .onClick((): void => {
           this.controller?.close();
           this.onNameIt();
         })
-      Button($r('app.string.prompt_later'))
+      Button($r('app.string.prompt_later'), { type: ButtonType.Capsule })
+        .height(50)
         .width('100%')
-        .backgroundColor($r('app.color.accent_soft'))
+        .backgroundColor($r('app.color.surface_alt'))
         .fontColor($r('app.color.accent'))
         .onClick((): void => {
           this.controller?.close();
           this.onNotNow();
         })
-      Button($r('app.string.prompt_never'))
+      Button($r('app.string.prompt_never'), { type: ButtonType.Capsule })
+        .height(50)
         .width('100%')
         .backgroundColor(Color.Transparent)
         .fontColor($r('app.color.muted'))
@@ -38,6 +41,8 @@ export struct PromptDialog {
     }
     .padding(24)
     .backgroundColor($r('app.color.surface'))
-    .borderRadius(24)
+    .borderRadius(30)
+    .border({ width: 1, color: $r('app.color.border') })
+    .shadow({ radius: 30, color: '#55000000', offsetY: 10 })
   }
 }

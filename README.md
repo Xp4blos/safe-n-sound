@@ -124,11 +124,15 @@ phone's microphone in a quiet room; search the web for "smoke detector beep", "m
   but no speech recogniser is bundled.
 - English UI only. Lint reports 5 style warnings (prefer `@Builder` over small components).
 
+## License
+
+There is deliberately no license file: this is the team's own work, all rights reserved by the authors.
+
 ## Prior code and AI use
 
-- `entry/src/main/cpp/ambient` is prior code written by a member of the team for this hackathon
-  (https://github.com/Xp4blos/hack-yeah-2026, commit `512e41d`), included without `speech.*`; it has no license
-  file yet. See `entry/src/main/cpp/ambient/README.md`.
+- `entry/src/main/cpp/ambient` is the sound engine written by a member of the team for this hackathon
+  (https://github.com/Xp4blos/hack-yeah-2026, commit `512e41d`), included without `speech.*`. See
+  `entry/src/main/cpp/ambient/README.md`.
 - No third-party open-source code is bundled besides the HarmonyOS SDK, hypium/hamock test libraries (installed
   by `ohpm`) and the DevEco toolchain.
 - AI assistants were used throughout; see `AI_WORKFLOW.md` for tools, prompts, validation and the bugs found

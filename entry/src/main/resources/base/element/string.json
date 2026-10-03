@@ -247,6 +247,34 @@
     {
       "name": "first_heard",
       "value": "First heard %s"
+    },
+    {
+      "name": "app_title",
+      "value": "Safe'n'Sound"
+    },
+    {
+      "name": "tap_to_start",
+      "value": "Tap the microphone to start listening"
+    },
+    {
+      "name": "tap_to_stop",
+      "value": "Tap the microphone to stop"
+    },
+    {
+      "name": "state_chip_error",
+      "value": "Problem"
+    },
+    {
+      "name": "state_chip_denied",
+      "value": "No microphone access"
+    },
+    {
+      "name": "teach_icon_hint",
+      "value": "Teach a sound"
+    },
+    {
+      "name": "section_sounds",
+      "value": "Sounds heard"
     }
   ]
 }

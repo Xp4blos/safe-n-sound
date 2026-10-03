@@ -30,7 +30,7 @@ export struct SoundDetailDialog {
 
   build() {
     Column({ space: 14 }) {
-      Text($r('app.string.detail_title')).fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.on_surface'))
+      Text($r('app.string.detail_title')).fontSize(22).fontWeight(FontWeight.Bold).fontColor($r('app.color.on_surface'))
 
       if (this.record !== undefined) {
         Text(SoundCatalog.describe(this.record.profile)).fontSize(16).fontColor($r('app.color.on_surface'))
@@ -49,6 +49,9 @@ export struct SoundDetailDialog {
 
       TextInput({ text: this.draftName, placeholder: $r('app.string.dialog_name_hint') })
         .maxLength(40)
+        .height(50)
+        .borderRadius(16)
+        .backgroundColor($r('app.color.surface_alt'))
         .onChange((value: string): void => {
           this.draftName = value;
         })
@@ -64,16 +67,18 @@ export struct SoundDetailDialog {
       .width('100%')
 
       Row({ space: 12 }) {
-        Button($r('app.string.btn_cancel'))
+        Button($r('app.string.btn_cancel'), { type: ButtonType.Capsule })
+          .height(50)
           .layoutWeight(1)
-          .backgroundColor($r('app.color.accent_soft'))
+          .backgroundColor($r('app.color.surface_alt'))
           .fontColor($r('app.color.accent'))
           .onClick((): void => {
             this.controller?.close();
           })
-        Button($r('app.string.btn_save'))
+        Button($r('app.string.btn_save'), { type: ButtonType.Capsule })
+          .height(50)
           .layoutWeight(1)
-          .backgroundColor($r('app.color.accent'))
+          .linearGradient({ angle: 90, colors: [[$r('app.color.accent'), 0], [$r('app.color.accent_end'), 1]] })
           .fontColor($r('app.color.on_accent'))
           .onClick((): void => {
             if (this.record !== undefined) {
@@ -84,7 +89,9 @@ export struct SoundDetailDialog {
       }
       .width('100%')
 
-      Button(this.confirmDelete ? $r('app.string.detail_delete_confirm') : $r('app.string.detail_delete'))
+      Button(this.confirmDelete ? $r('app.string.detail_delete_confirm') : $r('app.string.detail_delete'),
+        { type: ButtonType.Capsule })
+        .height(50)
         .width('100%')
         .backgroundColor(Color.Transparent)
         .fontColor($r('app.color.danger'))
@@ -101,6 +108,8 @@ export struct SoundDetailDialog {
     }
     .padding(24)
     .backgroundColor($r('app.color.surface'))
-    .borderRadius(24)
+    .borderRadius(30)
+    .border({ width: 1, color: $r('app.color.border') })
+    .shadow({ radius: 30, color: '#55000000', offsetY: 10 })
   }
 }

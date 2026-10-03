@@ -69,7 +69,7 @@ export struct TeachDialog {
 
   build() {
     Column({ space: 14 }) {
-      Text($r('app.string.teach_title')).fontSize(20).fontWeight(FontWeight.Medium).fontColor($r('app.color.on_surface'))
+      Text($r('app.string.teach_title')).fontSize(22).fontWeight(FontWeight.Bold).fontColor($r('app.color.on_surface'))
       Text($r('app.string.teach_intro')).fontSize(14).fontColor($r('app.color.muted'))
 
       ForEach(this.statuses, (status: TakeStatus, index: number) => {
@@ -88,9 +88,10 @@ export struct TeachDialog {
       if (this.recording) {
         Text($r('app.string.teach_recording', this.secondsLeft)).fontSize(16).fontColor($r('app.color.accent'))
       } else if (this.statuses.length < MAX_TAKES) {
-        Button($r('app.string.teach_record', this.statuses.length + 1))
+        Button($r('app.string.teach_record', this.statuses.length + 1), { type: ButtonType.Capsule })
+          .height(50)
           .width('100%')
-          .backgroundColor($r('app.color.accent'))
+          .linearGradient({ angle: 90, colors: [[$r('app.color.accent'), 0], [$r('app.color.accent_end'), 1]] })
           .fontColor($r('app.color.on_accent'))
           .onClick((): void => {
             this.record();
@@ -103,6 +104,9 @@ export struct TeachDialog {
 
       TextInput({ text: this.name, placeholder: $r('app.string.teach_name_hint') })
         .maxLength(40)
+        .height(50)
+        .borderRadius(16)
+        .backgroundColor($r('app.color.surface_alt'))
         .onChange((value: string): void => {
           this.name = value;
         })
@@ -112,16 +116,18 @@ export struct TeachDialog {
       }
 
       Row({ space: 12 }) {
-        Button($r('app.string.btn_cancel'))
+        Button($r('app.string.btn_cancel'), { type: ButtonType.Capsule })
+          .height(50)
           .layoutWeight(1)
-          .backgroundColor($r('app.color.accent_soft'))
+          .backgroundColor($r('app.color.surface_alt'))
           .fontColor($r('app.color.accent'))
           .onClick((): void => {
             this.controller?.close();
           })
-        Button($r('app.string.teach_save'))
+        Button($r('app.string.teach_save'), { type: ButtonType.Capsule })
+          .height(50)
           .layoutWeight(1)
-          .backgroundColor($r('app.color.accent'))
+          .linearGradient({ angle: 90, colors: [[$r('app.color.accent'), 0], [$r('app.color.accent_end'), 1]] })
           .fontColor($r('app.color.on_accent'))
           .enabled(!this.recording && !this.saving && this.goodTakes() >= MIN_GOOD_TAKES && this.name.trim() !== '')
           .onClick((): void => {
@@ -132,6 +138,8 @@ export struct TeachDialog {
     }
     .padding(24)
     .backgroundColor($r('app.color.surface'))
-    .borderRadius(24)
+    .borderRadius(30)
+    .border({ width: 1, color: $r('app.color.border') })
+    .shadow({ radius: 30, color: '#55000000', offsetY: 10 })
   }
 }

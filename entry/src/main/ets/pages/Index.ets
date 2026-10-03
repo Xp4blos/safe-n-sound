@@ -335,6 +335,22 @@ struct Index {
     return '';
   }
 
+  // Bottom bar item: icon above a label, highlighted for the current tab.
+  @Builder
+  tabItem(title: Resource, icon: Resource, index: number) {
+    Column({ space: 3 }) {
+      SymbolGlyph(icon)
+        .fontSize(24)
+        .fontColor([this.currentTab === index ? $r('app.color.accent') : $r('app.color.muted')])
+      Text(title)
+        .fontSize(12)
+        .fontWeight(this.currentTab === index ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.currentTab === index ? $r('app.color.accent') : $r('app.color.muted'))
+    }
+    .width('100%')
+    .padding({ top: 8, bottom: 8 })
+  }
+
   build() {
     Tabs({ barPosition: BarPosition.End, index: this.currentTab }) {
       TabContent() {
@@ -355,7 +371,7 @@ struct Index {
           }
         })
       }
-      .tabBar($r('app.string.tab_listen'))
+      .tabBar(this.tabItem($r('app.string.tab_listen'), $r('sys.symbol.mic'), 0))
 
       TabContent() {
         HistoryTab({
@@ -365,7 +381,7 @@ struct Index {
           }
         })
       }
-      .tabBar($r('app.string.tab_history'))
+      .tabBar(this.tabItem($r('app.string.tab_history'), $r('sys.symbol.clock'), 1))
 
       TabContent() {
         MySoundsTab({
@@ -378,10 +394,12 @@ struct Index {
           }
         })
       }
-      .tabBar($r('app.string.tab_mysounds'))
+      .tabBar(this.tabItem($r('app.string.tab_mysounds'), $r('sys.symbol.bell'), 2))
     }
     .width('100%')
     .height('100%')
+    .barHeight(68)
+    .barBackgroundColor($r('app.color.surface'))
     .backgroundColor($r('app.color.page_bg'))
     .onChange((index: number): void => {
       this.currentTab = index;
