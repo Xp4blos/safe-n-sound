@@ -7,7 +7,6 @@ namespace sns {
 namespace {
 constexpr float kFloorRiseDbPerSec = 1.0f;
 constexpr float kFloorFallRate = 0.2f;  // fraction of the gap closed per frame when level is below the floor
-constexpr int kMinGapFramesForNewSegment = 2;
 }  // namespace
 
 EventDetector::EventDetector(int sampleRate) : frameSec_(static_cast<double>(kFrameSize) / sampleRate) {}
@@ -31,13 +30,19 @@ void EventDetector::Push(const FrameFeatures& f, double frameStartSec, std::vect
             inEvent_ = true;
             startSec_ = frameStartSec;
             segments_ = 0;
-            inactiveRun_ = kMinGapFramesForNewSegment;  // first active frame opens segment 1
+            inactiveRun_ = kMinSegmentGapFrames;  // first active frame opens segment 1
+            frames_.clear();
+            mask_.clear();
         }
-        if (inactiveRun_ >= kMinGapFramesForNewSegment) ++segments_;
+        if (inactiveRun_ >= kMinSegmentGapFrames) ++segments_;
         inactiveRun_ = 0;
         lastActiveEndSec_ = frameEndSec;
+        frames_.push_back(f);
+        mask_.push_back(true);
     } else if (inEvent_) {
         ++inactiveRun_;
+        frames_.push_back(f);
+        mask_.push_back(false);
         if (frameEndSec - lastActiveEndSec_ >= kCloseSilenceSec) Close(out);
     }
 
@@ -55,6 +60,11 @@ void EventDetector::Close(std::vector<Event>* out) {
         e.startSec = startSec_;
         e.durationSec = duration;
         e.kind = segments_ >= 3 ? EventKind::Pulsed : EventKind::Tonal;
+        while (!mask_.empty() && !mask_.back()) {  // drop the trailing silence that closed the event
+            mask_.pop_back();
+            frames_.pop_back();
+        }
+        e.fp = BuildFingerprint(frames_, mask_, frameSec_);
         out->push_back(e);
     }
     inEvent_ = false;

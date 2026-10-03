@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 
+#include "fingerprint.h"
 #include "frame_analyzer.h"
 #include "types.h"
 
@@ -31,6 +32,8 @@ private:
     double lastActiveEndSec_ = 0.0;
     int segments_ = 0;
     int inactiveRun_ = 0;
+    std::vector<FrameFeatures> frames_;  // frames of the event in progress, from its first frame on
+    std::vector<bool> mask_;             // true where the matching frame was active
 };
 
 }  // namespace sns
