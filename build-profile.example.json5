@@ -1,0 +1,45 @@
+// Template for the project-level build-profile.json5, which is NOT committed because DevEco Studio
+// writes your personal signing credentials into it. Copy this file to build-profile.json5, then either
+// open the project in DevEco Studio and use File > Project Structure > Signing Configs > "Automatically
+// generate signature", or add your own "signingConfigs" entry and keep "signingConfig": "default" below.
+{
+  "app": {
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "targetSdkVersion": "6.1.1(24)",
+        "compatibleSdkVersion": "6.0.0(20)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

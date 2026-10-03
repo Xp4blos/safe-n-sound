@@ -6,51 +6,67 @@ This project uses AI-assisted development. Keep this document current and public
 
 | Model, agent, MCP server, or Agent Skill | Version or source | Role in the project |
 | --- | --- | --- |
-| [Tool name] | [Version/source] | [Ideation, implementation, review, testing, debugging, etc.] |
+| Claude Sonnet 5.5 (`claude-sonnet-5-5`) in Claude Code | Anthropic | Design dialogue, spec and plan writing, C++ engine, NAPI bridge, ArkTS app, tests, debugging, documentation |
+| Agent Skill `superpowers:brainstorming` | superpowers plugin | Scoping and design approval before any code |
+| Agent Skill `superpowers:writing-plans` | superpowers plugin | Written implementation plan from the approved spec |
+| Agent Skill `superpowers:executing-plans` | superpowers plugin | Inline task-by-task execution with a progress ledger |
+| Agent Skill `superpowers:test-driven-development` | superpowers plugin | Red-green discipline for every task |
+| Hackathon skills (`ohos-app-dev`, ArkTS knowledge base) | hackyeah2026-challenge repository | Build/validation guidance and ArkTS reference |
+
+No MCP server was used for the product work.
 
 ## Important prompts and instructions
 
-- `AGENTS.md` — repository-wide hackathon constraints and working agreement.
-- [Summarize the important project prompt or reusable instruction. Include the full public-safe text when practical.]
+- `AGENTS.md` - repository-wide hackathon constraints and working agreement (the user directs product, UI and scope decisions; ask before deciding them).
+- Project brief given by the user: an app for people who are hard of hearing that detects beeps, alarms, signals and door rings by sound amplitude, frequency and dynamics, remembers specific sounds, keeps a history, and lets the user name a sound to be notified when it is heard again. Core logic in C++, UI in ArkTS, using microphone, vibration and notifications.
+- Decisions the user confirmed during design: C++ engine written from scratch, fingerprint-based memory, foreground-only listening, two tabs (Listen, History), vibrate on any detection and notify only for named sounds, calm blue palette, pulsing microphone with an 8-second equaliser-style level chart.
 
 ## AI-assisted work log
 
 | Date | Tool/model | Request or task | Generated or changed | Human review and validation |
 | --- | --- | --- | --- | --- |
-| [YYYY-MM-DD] | [Tool/model] | [Prompt summary] | [Files/design/code] | [How it was checked] |
+| 2026-10-03 | Claude Sonnet 5.5 | Brainstorm scope and approve a design | `docs/superpowers/specs/2026-10-03-sound-detection-history-design.md` | User answered the scoping questions and approved the spec |
+| 2026-10-03 | Claude Sonnet 5.5 | Write implementation plan | `docs/superpowers/plans/2026-10-03-sound-detection-history.md` | User reviewed the plan and chose inline execution |
+| 2026-10-03 | Claude Sonnet 5.5 | C++ engine (FFT analysis, event detector, fingerprint, matcher, facade, `wav_cli`) | `entry/src/main/cpp/engine`, `tools`, `tests` | 25 host unit tests on synthetic audio, written failing first; `wav_cli` run on a generated tone |
+| 2026-10-03 | Claude Sonnet 5.5 | NAPI bridge and native build wiring | `entry/src/main/cpp/napi`, `CMakeLists.txt`, `types/` | `.hap` built with `libsafensound.so`; synthetic-tone smoke run on a physical phone returned one tonal event |
+| 2026-10-03 | Claude Sonnet 5.5 | ArkTS model, services, UI | `entry/src/main/ets`, resources, manifest | 26 ArkTS unit tests; `.hap` builds; Listen and History tabs screenshotted on the phone |
 
 ## Workflow
 
 ### Ideation and architecture
 
-[Describe how AI influenced the product idea, scope, architecture, and platform-capability choice.]
+The user supplied the product brief. The model asked scoping questions one at a time (engine origin, how sounds are remembered, listening mode, UI layout, alert rules) and proposed an approach: capture audio in ArkTS and analyse it in a dependency-free C++ engine behind a thin NAPI bridge, so the DSP is testable on a PC. The user approved the design, then the written spec, then the plan.
 
 ### Implementation
 
-[Describe the AI-assisted coding workflow and how generated output was reviewed before acceptance.]
+Work followed the plan task by task on the `feature/sound-detection` branch, each task test-first with small commits. Platform APIs (Preferences, vibrator, notifications, AudioCapturer, permissions) were checked against the SDK's own `.d.ts` declarations rather than written from memory.
 
 ### Testing and debugging
 
-[Record builds, linting, tests, device/emulator runs, UI inspection, logs, screenshots, and manual checks.]
+- C++: `scripts\host-tests.cmd` (MSVC + SDK cmake/ninja), 25 tests.
+- ArkTS: `scripts/arkts-tests.sh` (hvigor + hypium), 26 tests.
+- Build: `hvigorw assembleHap` succeeds.
+- Device: installed on a physical Huawei phone (PLR-AL00, API 26). A synthetic 1 kHz tone passed through the native library produced one tonal event; Listen and History screens were captured by screenshot.
 
 ## Unsuccessful approaches
 
-- [What was tried, why it failed, and what changed afterward.]
+- The SDK's `clang++` cannot build host tests (no Windows C++ standard library); MSVC Build Tools are used instead.
+- `devecocli` requires Node 22+ and only Node 18 is installed, so `devecocli build`, `docs search` and `check lint` could not run; `hvigorw` was used directly with the user's approval, and the bundled ArkTS linter also failed under Node 18.
+- hilog domain `0x0000` produced no output on the test phone; domain `0x3201` is used.
 
 ## Known limitations
 
-- [Product, platform, model, data, testing, or tooling limitation.]
+- Microphone capture, the permission dialogs, live chart, naming dialog and notifications have not been exercised by the agent; they need the manual test on a device.
+- Detection thresholds (`kTonalityMin`, `kActiveMarginDb`, `kMatchThreshold`) were tuned on synthetic audio only; real doorbells, smoke alarms and noisy rooms are untested.
+- Lint was not run (tool unavailable).
+- Foreground listening only; no speech, knock or loud-sound classes.
+- English UI only.
 
 ## Lessons learned
 
-- [Concise lesson that would help reproduce or improve the work.]
+- Keep the engine free of OS dependencies: it made the DSP fully testable on the PC before any device work.
+- Check the toolchain (Node version, host compiler) at the start; two tools in the project instructions could not run here.
 
 ## AI feature disclosure
 
-Complete this section only if AI is part of the product itself; otherwise write "Not applicable."
-
-- Model or service: [Name/version/provider]
-- Inference flow: [On-device, remote, or hybrid; inputs and outputs]
-- Data handling and privacy: [What leaves the device, retention, consent, and safeguards]
-- Failure and fallback behavior: [How errors, latency, offline use, and unsafe output are handled]
-- Evaluation: [Test cases, quality measures, human review, and known model limitations]
+Not applicable. The app uses classical signal processing (FFT, thresholds, fingerprint similarity) on the device; it contains no machine-learning model or AI service.
