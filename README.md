@@ -101,6 +101,34 @@ On first start the app asks for notification permission and the microphone permi
 explanation). If you deny the microphone, the Listen tab explains why it is needed and the next try opens the
 system Settings page.
 
+## Signed .hap
+
+A signed package is what a device or emulator accepts. It is produced like this (the signing data stays on the
+machine, it is never committed):
+
+1. Open the project in DevEco Studio, connect the phone (or start the emulator) and sign in with a Huawei ID.
+2. File > Project Structure > Signing Configs > tick "Automatically generate signature" > Apply. DevEco creates a
+   debug certificate (alias `debugKey`) and a debug profile in `%USERPROFILE%\.ohos\config` and writes them into
+   `build-profile.json5` (keep that change out of git: `git update-index --skip-worktree build-profile.json5`).
+3. Build and verify both variants with one command:
+
+   ```bash
+   bash scripts/make-signed-hap.sh
+   ```
+
+   This runs `hvigorw assembleHap` for `debug` and `release` (`-p buildMode=release`), copies the results to
+   `dist/safe-n-sound-debug-signed.hap` and `dist/safe-n-sound-release-signed.hap`, and checks each signature with
+   the SDK's `hap-sign-tool.jar verify-app` (expected: `Verify success`).
+4. Install: `hdc install -r dist/safe-n-sound-release-signed.hap`.
+
+What this signature is, honestly: the certificate and profile are the auto-generated **debug** ones. The profile is
+bound to the bundle `com.example.safe_n_sound` and to the devices that were registered when it was generated, and it
+is valid for about two weeks (the profile of the submitted build: 2026-10-03 to 2026-10-17, one registered device).
+So the package installs on that phone only; to install it on another phone or an emulator, repeat step 2 with that
+device connected and rebuild. Publishing to other users would need a release certificate and profile from AppGallery
+Connect, which this project does not have. The `.hap` files are not in the repository (the profile inside contains
+the registered device's ID); `dist/` is git-ignored.
+
 ## How to trigger a detection for a demo
 
 The detector reacts to **tonal signals of 0.4 s or longer between 800 and 4500 Hz** (smoke-alarm and appliance
