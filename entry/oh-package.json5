@@ -5,6 +5,8 @@
   "main": "",
   "author": "",
   "license": "",
-  "dependencies": {}
+  "dependencies": {
+    "libsafensound.so": "file:./src/main/cpp/types/libsafensound"
+  }
 }
 
