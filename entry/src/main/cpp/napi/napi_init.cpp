@@ -1,17 +1,17 @@
-// NAPI bridge between ArkTS and the Safe'n'Sound engine. Thin on purpose: argument checking and
-// conversion only; all signal processing lives in ../engine.
+// NAPI bridge between ArkTS and the Safe'n'Sound sound engine. Thin on purpose: argument checking and
+// conversion only; all signal processing lives in ../ambient, ../profile and ../wrapper.
 #include <cstdint>
 #include <cstring>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <vector>
 
 #include "hilog/log.h"
 #include "napi/native_api.h"
 
-#include "matcher.h"
-#include "engine.h"
+#include "sound_engine.h"
 
 namespace {
 
@@ -19,7 +19,7 @@ constexpr unsigned int kLogDomain = 0x3201;
 constexpr const char* kLogTag = "SnsNative";
 
 std::mutex g_mutex;
-std::map<int, std::unique_ptr<sns::Engine>> g_engines;
+std::map<int, std::unique_ptr<sns::SoundEngine>> g_engines;
 int g_nextHandle = 1;
 
 napi_value Undefined(napi_env env) {
@@ -39,31 +39,28 @@ napi_value MakeNumber(napi_env env, double d) {
     return v;
 }
 
-napi_value MakeMatchResult(napi_env env, int index, float score) {
-    napi_value obj;
-    napi_create_object(env, &obj);
-    napi_set_named_property(env, obj, "index", MakeNumber(env, index));
-    napi_set_named_property(env, obj, "score", MakeNumber(env, score));
-    return obj;
+napi_value MakeBool(napi_env env, bool b) {
+    napi_value v;
+    napi_get_boolean(env, b, &v);
+    return v;
 }
 
-// Reads a JS array of numbers into `out`; false if `value` is not an array of numbers.
-bool ReadNumberArray(napi_env env, napi_value value, std::vector<float>* out) {
-    bool isArray = false;
-    if (napi_is_array(env, value, &isArray) != napi_ok || !isArray) return false;
-    uint32_t length = 0;
-    napi_get_array_length(env, value, &length);
-    out->clear();
-    out->reserve(length);
-    for (uint32_t i = 0; i < length; ++i) {
-        napi_value item;
-        double d = 0.0;
-        if (napi_get_element(env, value, i, &item) != napi_ok || napi_get_value_double(env, item, &d) != napi_ok) {
-            return false;
-        }
-        out->push_back(static_cast<float>(d));
-    }
-    return true;
+napi_value MakeString(napi_env env, const std::string& s) {
+    napi_value v;
+    napi_create_string_utf8(env, s.c_str(), s.size(), &v);
+    return v;
+}
+
+napi_value MakeArrayBuffer(napi_env env, const std::vector<uint8_t>& bytes) {
+    void* data = nullptr;
+    napi_value buffer;
+    napi_create_arraybuffer(env, bytes.size(), &data, &buffer);
+    if (!bytes.empty() && data != nullptr) std::memcpy(data, bytes.data(), bytes.size());
+    return buffer;
+}
+
+void SetProp(napi_env env, napi_value obj, const char* name, napi_value value) {
+    napi_set_named_property(env, obj, name, value);
 }
 
 bool ReadHandle(napi_env env, napi_value value, int* handle) {
@@ -71,6 +68,90 @@ bool ReadHandle(napi_env env, napi_value value, int* handle) {
     if (napi_get_value_int32(env, value, &h) != napi_ok) return false;
     *handle = h;
     return true;
+}
+
+bool ReadString(napi_env env, napi_value value, std::string* out) {
+    size_t length = 0;
+    if (napi_get_value_string_utf8(env, value, nullptr, 0, &length) != napi_ok) return false;
+    std::string s(length, '\0');
+    size_t copied = 0;
+    if (napi_get_value_string_utf8(env, value, &s[0], length + 1, &copied) != napi_ok) return false;
+    s.resize(copied);
+    *out = s;
+    return true;
+}
+
+// Copies the bytes of an ArrayBuffer (the source may not be aligned, so never alias it).
+bool ReadBytes(napi_env env, napi_value value, std::vector<uint8_t>* out) {
+    void* data = nullptr;
+    size_t length = 0;
+    if (napi_get_arraybuffer_info(env, value, &data, &length) != napi_ok) return false;
+    out->resize(length);
+    if (length > 0) std::memcpy(out->data(), data, length);
+    return true;
+}
+
+// 16-bit little-endian PCM from an ArrayBuffer; an odd trailing byte is ignored and logged.
+bool ReadPcm(napi_env env, napi_value value, std::vector<int16_t>* out) {
+    std::vector<uint8_t> bytes;
+    if (!ReadBytes(env, value, &bytes)) return false;
+    if (bytes.size() % 2 != 0) {
+        OH_LOG_Print(LOG_APP, LOG_WARN, kLogDomain, kLogTag, "odd PCM byte length %{public}zu, ignoring last byte",
+                     bytes.size());
+    }
+    out->resize(bytes.size() / 2);
+    if (!out->empty()) std::memcpy(out->data(), bytes.data(), out->size() * 2);
+    return true;
+}
+
+napi_value ProfileToJs(napi_env env, const sns::SoundProfile& p) {
+    napi_value obj, env8;
+    napi_create_object(env, &obj);
+    SetProp(env, obj, "dominantHz", MakeNumber(env, p.dominantHz));
+    SetProp(env, obj, "durationSec", MakeNumber(env, p.durationSec));
+    SetProp(env, obj, "beepCount", MakeNumber(env, p.beepCount));
+    SetProp(env, obj, "beepsPerSec", MakeNumber(env, p.beepsPerSec));
+    SetProp(env, obj, "repetition", MakeNumber(env, p.repetition));
+    SetProp(env, obj, "modulation", MakeNumber(env, p.modulation));
+    napi_create_array_with_length(env, p.envelope.size(), &env8);
+    for (size_t i = 0; i < p.envelope.size(); ++i) {
+        napi_set_element(env, env8, static_cast<uint32_t>(i), MakeNumber(env, p.envelope[i]));
+    }
+    SetProp(env, obj, "envelope", env8);
+    return obj;
+}
+
+napi_value LearnResultToJs(napi_env env, const sns::LearnResult& r) {
+    napi_value obj;
+    napi_create_object(env, &obj);
+    SetProp(env, obj, "ok", MakeBool(env, r.ok));
+    SetProp(env, obj, "message", MakeString(env, r.message));
+    SetProp(env, obj, "template", MakeArrayBuffer(env, r.templateBytes));
+    SetProp(env, obj, "profile", ProfileToJs(env, r.profile));
+    SetProp(env, obj, "consistency", MakeNumber(env, r.consistency));
+    return obj;
+}
+
+napi_value EventToJs(napi_env env, const sns::EngineEvent& e) {
+    napi_value obj;
+    napi_create_object(env, &obj);
+    SetProp(env, obj, "type", MakeString(env, e.type));
+    SetProp(env, obj, "timeSec", MakeNumber(env, e.timeSec));
+    SetProp(env, obj, "startSec", MakeNumber(env, e.startSec));
+    SetProp(env, obj, "confidence", MakeNumber(env, e.confidence));
+    SetProp(env, obj, "freqHz", MakeNumber(env, e.freqHz));
+    SetProp(env, obj, "levelDb", MakeNumber(env, e.levelDb));
+    SetProp(env, obj, "label", MakeString(env, e.label));
+    return obj;
+}
+
+// Runs `fn(engine)` under the lock; throws a JS error for an unknown handle.
+template <typename Fn>
+napi_value WithEngine(napi_env env, int handle, Fn fn) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto it = g_engines.find(handle);
+    if (it == g_engines.end()) return Throw(env, "unknown engine handle");
+    return fn(*it->second);
 }
 
 napi_value CreateEngine(napi_env env, napi_callback_info info) {
@@ -82,10 +163,14 @@ napi_value CreateEngine(napi_env env, napi_callback_info info) {
         sampleRate > 48000) {
         return Throw(env, "createEngine: sampleRate must be an integer between 8000 and 48000");
     }
-    std::lock_guard<std::mutex> lock(g_mutex);
-    const int handle = g_nextHandle++;
-    g_engines[handle] = std::make_unique<sns::Engine>(sampleRate);
-    return MakeNumber(env, handle);
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        const int handle = g_nextHandle++;
+        g_engines[handle] = std::make_unique<sns::SoundEngine>(sampleRate);
+        return MakeNumber(env, handle);
+    } catch (...) {
+        return Throw(env, "createEngine: could not create the engine");
+    }
 }
 
 napi_value DestroyEngine(napi_env env, napi_callback_info info) {
@@ -95,20 +180,8 @@ napi_value DestroyEngine(napi_env env, napi_callback_info info) {
     int handle = 0;
     if (argc < 1 || !ReadHandle(env, args[0], &handle)) return Throw(env, "destroyEngine: bad handle");
     std::lock_guard<std::mutex> lock(g_mutex);
-    g_engines.erase(handle);  // unknown handle: nothing to do
+    g_engines.erase(handle);
     return Undefined(env);
-}
-
-napi_value EventToJs(napi_env env, const sns::Event& e) {
-    napi_value obj, fp;
-    napi_create_object(env, &obj);
-    napi_set_named_property(env, obj, "startSec", MakeNumber(env, e.startSec));
-    napi_set_named_property(env, obj, "durationSec", MakeNumber(env, e.durationSec));
-    napi_set_named_property(env, obj, "kind", MakeNumber(env, static_cast<int>(e.kind)));
-    napi_create_array_with_length(env, e.fp.size(), &fp);
-    for (size_t i = 0; i < e.fp.size(); ++i) napi_set_element(env, fp, static_cast<uint32_t>(i), MakeNumber(env, e.fp[i]));
-    napi_set_named_property(env, obj, "fingerprint", fp);
-    return obj;
 }
 
 napi_value Process(napi_env env, napi_callback_info info) {
@@ -117,74 +190,115 @@ napi_value Process(napi_env env, napi_callback_info info) {
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
     int handle = 0;
     if (argc < 2 || !ReadHandle(env, args[0], &handle)) return Throw(env, "process: bad handle");
-
-    void* data = nullptr;
-    size_t byteLength = 0;
-    if (napi_get_arraybuffer_info(env, args[1], &data, &byteLength) != napi_ok) {
-        return Throw(env, "process: second argument must be an ArrayBuffer");
-    }
-    if (byteLength % 2 != 0) {
-        OH_LOG_Print(LOG_APP, LOG_WARN, kLogDomain, kLogTag, "odd PCM byte length %{public}zu, ignoring last byte",
-                     byteLength);
-    }
-    const size_t sampleCount = byteLength / 2;
-    std::vector<int16_t> pcm(sampleCount);  // copy: the ArrayBuffer may not be 2-byte aligned
-    if (sampleCount > 0) std::memcpy(pcm.data(), data, sampleCount * 2);
-
-    sns::EngineOutput out;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        auto it = g_engines.find(handle);
-        if (it == g_engines.end()) return Throw(env, "process: unknown engine handle");
-        out = it->second->Process(pcm.data(), sampleCount);
-    }
-
-    napi_value result, events;
-    napi_create_object(env, &result);
-    napi_create_array_with_length(env, out.events.size(), &events);
-    for (size_t i = 0; i < out.events.size(); ++i) {
-        napi_set_element(env, events, static_cast<uint32_t>(i), EventToJs(env, out.events[i]));
-    }
-    napi_set_named_property(env, result, "levelDb", MakeNumber(env, out.levelDb));
-    napi_set_named_property(env, result, "events", events);
-    return result;
+    std::vector<int16_t> pcm;
+    if (!ReadPcm(env, args[1], &pcm)) return Throw(env, "process: second argument must be an ArrayBuffer");
+    return WithEngine(env, handle, [&](sns::SoundEngine& engine) -> napi_value {
+        const sns::ProcessResult out = engine.Process(pcm.data(), pcm.size());
+        napi_value result, events, bands;
+        napi_create_object(env, &result);
+        napi_create_array_with_length(env, out.events.size(), &events);
+        for (size_t i = 0; i < out.events.size(); ++i) {
+            napi_set_element(env, events, static_cast<uint32_t>(i), EventToJs(env, out.events[i]));
+        }
+        napi_create_array_with_length(env, out.bands.size(), &bands);
+        for (size_t i = 0; i < out.bands.size(); ++i) {
+            napi_set_element(env, bands, static_cast<uint32_t>(i), MakeNumber(env, out.bands[i]));
+        }
+        SetProp(env, result, "levelDb", MakeNumber(env, out.levelDb));
+        SetProp(env, result, "bands", bands);
+        SetProp(env, result, "events", events);
+        return result;
+    });
 }
 
-napi_value MatchFingerprint(napi_env env, napi_callback_info info) {
+napi_value LearnSound(napi_env env, napi_callback_info info) {
+    size_t argc = 3;
+    napi_value args[3];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    int handle = 0;
+    std::string label;
+    double eventTimeSec = 0.0;
+    if (argc < 3 || !ReadHandle(env, args[0], &handle) || !ReadString(env, args[1], &label) ||
+        napi_get_value_double(env, args[2], &eventTimeSec) != napi_ok) {
+        return Throw(env, "learnSound: expected (handle, label, eventTimeSec)");
+    }
+    return WithEngine(env, handle, [&](sns::SoundEngine& engine) -> napi_value {
+        return LearnResultToJs(env, engine.LearnFromRing(label, eventTimeSec));
+    });
+}
+
+napi_value TrainSound(napi_env env, napi_callback_info info) {
+    size_t argc = 3;
+    napi_value args[3];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    int handle = 0;
+    std::string label;
+    bool isArray = false;
+    if (argc < 3 || !ReadHandle(env, args[0], &handle) || !ReadString(env, args[1], &label) ||
+        napi_is_array(env, args[2], &isArray) != napi_ok || !isArray) {
+        return Throw(env, "trainSound: expected (handle, label, takes: ArrayBuffer[])");
+    }
+    uint32_t count = 0;
+    napi_get_array_length(env, args[2], &count);
+    std::vector<std::vector<int16_t>> takes;
+    for (uint32_t i = 0; i < count; ++i) {
+        napi_value item;
+        std::vector<int16_t> pcm;
+        if (napi_get_element(env, args[2], i, &item) != napi_ok || !ReadPcm(env, item, &pcm)) {
+            return Throw(env, "trainSound: every take must be an ArrayBuffer");
+        }
+        takes.push_back(std::move(pcm));
+    }
+    return WithEngine(env, handle, [&](sns::SoundEngine& engine) -> napi_value {
+        return LearnResultToJs(env, engine.TrainFromTakes(label, takes));
+    });
+}
+
+napi_value CheckTake(napi_env env, napi_callback_info info) {
     size_t argc = 2;
     napi_value args[2];
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
-    if (argc < 2) return Throw(env, "matchFingerprint: expected (fp, saved)");
-
-    std::vector<float> fpValues;
-    if (!ReadNumberArray(env, args[0], &fpValues) || fpValues.size() != sns::kFingerprintSize) {
-        return MakeMatchResult(env, -1, 0.0f);
+    int handle = 0;
+    std::vector<int16_t> pcm;
+    if (argc < 2 || !ReadHandle(env, args[0], &handle) || !ReadPcm(env, args[1], &pcm)) {
+        return Throw(env, "checkTake: expected (handle, take: ArrayBuffer)");
     }
-    sns::Fingerprint fp;
-    std::copy(fpValues.begin(), fpValues.end(), fp.begin());
+    return WithEngine(env, handle, [&](sns::SoundEngine& engine) -> napi_value {
+        return LearnResultToJs(env, engine.CheckTake(pcm));
+    });
+}
 
-    bool isArray = false;
-    if (napi_is_array(env, args[1], &isArray) != napi_ok || !isArray) return MakeMatchResult(env, -1, 0.0f);
-    uint32_t savedCount = 0;
-    napi_get_array_length(env, args[1], &savedCount);
-
-    std::vector<sns::Fingerprint> valid;
-    std::vector<int> originalIndex;  // maps positions in `valid` back to the caller's array
-    for (uint32_t i = 0; i < savedCount; ++i) {
-        napi_value item;
-        std::vector<float> values;
-        if (napi_get_element(env, args[1], i, &item) != napi_ok || !ReadNumberArray(env, item, &values) ||
-            values.size() != sns::kFingerprintSize) {
-            continue;  // skip malformed saved fingerprints
+napi_value AddSound(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    int handle = 0;
+    std::vector<uint8_t> bytes;
+    if (argc < 2 || !ReadHandle(env, args[0], &handle) || !ReadBytes(env, args[1], &bytes)) {
+        return Throw(env, "addSound: expected (handle, template: ArrayBuffer)");
+    }
+    return WithEngine(env, handle, [&](sns::SoundEngine& engine) -> napi_value {
+        std::string error;
+        const bool ok = engine.AddSound(bytes, &error);
+        if (!ok) {
+            OH_LOG_Print(LOG_APP, LOG_WARN, kLogDomain, kLogTag, "stored sound rejected: %{public}s", error.c_str());
         }
-        sns::Fingerprint s;
-        std::copy(values.begin(), values.end(), s.begin());
-        valid.push_back(s);
-        originalIndex.push_back(static_cast<int>(i));
-    }
+        return MakeBool(env, ok);
+    });
+}
 
-    const sns::MatchResult m = sns::Match(fp, valid);
-    return MakeMatchResult(env, m.index < 0 ? -1 : originalIndex[m.index], m.score);
+napi_value RemoveSound(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    int handle = 0;
+    std::string label;
+    if (argc < 2 || !ReadHandle(env, args[0], &handle) || !ReadString(env, args[1], &label)) {
+        return Throw(env, "removeSound: expected (handle, label)");
+    }
+    return WithEngine(env, handle, [&](sns::SoundEngine& engine) -> napi_value {
+        return MakeBool(env, engine.RemoveSound(label));
+    });
 }
 
 napi_value Init(napi_env env, napi_value exports) {
@@ -192,7 +306,11 @@ napi_value Init(napi_env env, napi_value exports) {
         {"createEngine", nullptr, CreateEngine, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"destroyEngine", nullptr, DestroyEngine, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"process", nullptr, Process, nullptr, nullptr, nullptr, napi_default, nullptr},
-        {"matchFingerprint", nullptr, MatchFingerprint, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"learnSound", nullptr, LearnSound, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"trainSound", nullptr, TrainSound, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"checkTake", nullptr, CheckTake, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"addSound", nullptr, AddSound, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"removeSound", nullptr, RemoveSound, nullptr, nullptr, nullptr, napi_default, nullptr},
     };
     napi_define_properties(env, exports, sizeof(props) / sizeof(props[0]), props);
     return exports;
