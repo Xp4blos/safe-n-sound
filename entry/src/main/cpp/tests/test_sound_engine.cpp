@@ -21,8 +21,8 @@ size_t Count(const std::vector<sns::EngineEvent>& events, const std::string& typ
 }
 
 // A sound with a little quiet background before and after, as the ring buffer of the app would hold it.
-std::vector<int16_t> Take(const std::vector<int16_t>& sound, uint32_t seed) {
-    return Concat({Noise(1.5, 0.003, seed), sound, Noise(1.5, 0.003, seed + 100)});
+std::vector<int16_t> Take(const std::vector<int16_t>& sound, uint32_t seed, double tailSec = 1.5) {
+    return Concat({Noise(1.5, 0.003, seed), sound, Noise(tailSec, 0.003, seed + 100)});
 }
 }  // namespace
 
@@ -54,7 +54,7 @@ TEST(engine_hum_and_motor_bursts_make_no_events) {
 
 TEST(engine_learns_a_detected_sound_and_recognises_it_again) {
     sns::SoundEngine engine(sns::kSampleRate);
-    const auto first = Feed(engine, Take(Tone(2000, 1.0, 0.3), 5));
+    const auto first = Feed(engine, Take(Tone(2000, 1.0, 0.3), 5, 4.0));
     CHECK(Count(first, "alarm") == 1);
     if (Count(first, "alarm") != 1) return;
     const double t = first[0].timeSec;
@@ -75,7 +75,7 @@ TEST(engine_learns_a_detected_sound_and_recognises_it_again) {
 
 TEST(engine_does_not_confuse_a_different_sound_with_a_learned_one) {
     sns::SoundEngine engine(sns::kSampleRate);
-    const auto first = Feed(engine, Take(Tone(2000, 1.0, 0.3), 7));
+    const auto first = Feed(engine, Take(Tone(2000, 1.0, 0.3), 7, 4.0));
     if (Count(first, "alarm") != 1) {
         CHECK(false);
         return;
