@@ -70,6 +70,9 @@ Work followed written plans, task by task and test first, with small commits on 
 - While the demo was recorded with a fast screenshot loop on the phone, repeats of the alarm were no longer recognised, although the same sound was recognised without that load; the audio stream is disturbed by heavy load on the phone. The same recording replayed on the PC gave the same result as the phone, which is how this was separated from a threshold problem. The capture was made lighter (half-size screenshots, no UI polling while a sound is analysed).
 - The engine's default similarity threshold (0.8) missed quieter repeats on real audio; it is 0.6 for learned sounds, checked on a real recording and on host tests that a different pitch is still not matched.
 - The "Doorbell detected" card was below the fold of the Listen tab, so it was moved to the top.
+- Teach a sound on the phone: two takes of the same sound were rejected as "recordings do not match each other" (similarity 0.08). The recorded takes showed why: the trainer cuts a sound out of a recording by loudness alone, and in a noisy room random noise crosses its threshold, so both cuts were almost the whole 6 s. Takes are now reduced to their clearest tonal stretch (600-6000 Hz, tonality 25+) before training; the two real takes are a fixture with a unit test. The sound description threshold is also relative to the loudest frame.
+- The "Doorbell detected" card, once at the top of the page, pushed the Stop and Teach buttons off screen for a minute; it is now an overlay that does not move anything and disappears when tapped.
+- The PC-speaker test setup is not stable: during the later part of the Teach test the phone stopped hearing the PC (system volume 42% and not muted, still nothing at 75%), so the remaining steps were not run.
 
 ## Unsuccessful approaches
 

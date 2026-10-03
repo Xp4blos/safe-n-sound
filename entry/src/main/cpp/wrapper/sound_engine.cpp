@@ -23,6 +23,64 @@ std::vector<ambient::Recording> AsRecordings(const std::vector<std::vector<int16
     for (const auto& t : takes) out.push_back({t.data(), t.size()});
     return out;
 }
+
+// The trainer cuts a sound out of a recording by loudness alone (a few dB above the 10th percentile level). In a
+// noisy room random noise crosses that threshold, so two takes of the same sound get different cuts and are rejected
+// as "not matching". Before training, a take is therefore reduced to its clearest tonal stretch: everything outside
+// it (plus a short margin) is silenced. A take without any tonal sound is returned unchanged.
+constexpr double kGateMarginSec = 0.25;
+constexpr double kGateMaxGapSec = 1.0;    // tonal frames closer than this belong to one sound
+constexpr double kGateMinSoundSec = 0.25;
+constexpr float kGateTonality = 25.0f;   // room hum has 15-35, a clear tone 30-75
+constexpr float kGateMinHz = 600.0f;     // below this it is mostly hum and rumble
+constexpr float kGateMaxHz = 6000.0f;
+constexpr float kGateAboveBackgroundDb = 12.0f;
+
+std::vector<int16_t> GateToTonalSound(const std::vector<int16_t>& take, int sampleRate,
+                                      double marginSec = kGateMarginSec) {
+    const size_t frames = take.size() / kFrameSize;
+    if (frames < 8) return take;
+    FrameAnalyzer analyzer(sampleRate);
+    std::vector<FrameFeatures> f(frames);
+    std::vector<float> levels(frames);
+    for (size_t i = 0; i < frames; ++i) {
+        f[i] = analyzer.Analyze(take.data() + i * kFrameSize);
+        levels[i] = f[i].levelDb;
+    }
+    std::vector<float> sorted = levels;
+    std::sort(sorted.begin(), sorted.end());
+    const float background = sorted[sorted.size() / 5];
+
+    const double frameSec = static_cast<double>(kFrameSize) / sampleRate;
+    const size_t maxGap = static_cast<size_t>(kGateMaxGapSec / frameSec);
+    struct Cluster {
+        size_t first, last, count;
+    };
+    std::vector<Cluster> clusters;
+    for (size_t i = 0; i < frames; ++i) {
+        const bool inBand = f[i].peakCount > 0 && f[i].peakHz[0] >= kGateMinHz && f[i].peakHz[0] <= kGateMaxHz;
+        const bool active = inBand && levels[i] > background + kGateAboveBackgroundDb && f[i].tonality >= kGateTonality;
+        if (!active) continue;
+        if (!clusters.empty() && i - clusters.back().last <= maxGap) {
+            clusters.back().last = i;
+            ++clusters.back().count;
+        } else {
+            clusters.push_back({i, i, 1});
+        }
+    }
+    if (clusters.empty()) return take;
+    const Cluster best = *std::max_element(clusters.begin(), clusters.end(),
+                                           [](const Cluster& a, const Cluster& b) { return a.count < b.count; });
+    if (static_cast<double>(best.last - best.first + 1) * frameSec < kGateMinSoundSec) return take;
+
+    const size_t margin = static_cast<size_t>(marginSec / frameSec);
+    const size_t from = (best.first > margin ? best.first - margin : 0) * kFrameSize;
+    const size_t to = std::min(frames, best.last + 1 + margin) * kFrameSize;
+    std::vector<int16_t> gated(take.size(), 0);
+    std::copy(take.begin() + static_cast<std::ptrdiff_t>(from), take.begin() + static_cast<std::ptrdiff_t>(to),
+              gated.begin() + static_cast<std::ptrdiff_t>(from));
+    return gated;
+}
 }  // namespace
 
 SoundEngine::SoundEngine(int sampleRate)
@@ -130,9 +188,12 @@ LearnResult SoundEngine::LearnFromRing(const std::string& label, double eventTim
         r.message = "The sound is no longer in memory.";
         return r;
     }
-    const std::vector<int16_t> window(ring_.begin() + static_cast<std::ptrdiff_t>(from - ringStart_),
-                                      ring_.begin() + static_cast<std::ptrdiff_t>(want1 - ringStart_));
-    const SoundProfile profile = DescribeSound(window.data(), window.size(), sampleRate_);
+    const std::vector<int16_t> window = GateToTonalSound(
+        std::vector<int16_t>(ring_.begin() + static_cast<std::ptrdiff_t>(from - ringStart_),
+                             ring_.begin() + static_cast<std::ptrdiff_t>(want1 - ringStart_)),
+        sampleRate_);
+    const std::vector<int16_t> core = GateToTonalSound(window, sampleRate_, 0.0);
+    const SoundProfile profile = DescribeSound(core.data(), core.size(), sampleRate_);
     return Train(label, {{window.data(), window.size()}}, profile, true);
 }
 
@@ -142,13 +203,18 @@ LearnResult SoundEngine::TrainFromTakes(const std::string& label, const std::vec
         r.message = "Record at least one take.";
         return r;
     }
-    const SoundProfile profile = DescribeSound(takes[0].data(), takes[0].size(), sampleRate_);
-    return Train(label, AsRecordings(takes), profile, true);
+    std::vector<std::vector<int16_t>> gated;
+    for (const auto& t : takes) gated.push_back(GateToTonalSound(t, sampleRate_));
+    const std::vector<int16_t> core = GateToTonalSound(takes[0], sampleRate_, 0.0);
+    const SoundProfile profile = DescribeSound(core.data(), core.size(), sampleRate_);
+    return Train(label, AsRecordings(gated), profile, true);
 }
 
 LearnResult SoundEngine::CheckTake(const std::vector<int16_t>& take) {
-    const SoundProfile profile = DescribeSound(take.data(), take.size(), sampleRate_);
-    return Train("take-check", {{take.data(), take.size()}}, profile, false);
+    const std::vector<int16_t> gated = GateToTonalSound(take, sampleRate_);
+    const std::vector<int16_t> core = GateToTonalSound(take, sampleRate_, 0.0);
+    const SoundProfile profile = DescribeSound(core.data(), core.size(), sampleRate_);
+    return Train("take-check", {{gated.data(), gated.size()}}, profile, false);
 }
 
 bool SoundEngine::AddSound(const std::vector<uint8_t>& bytes, std::string* error) {

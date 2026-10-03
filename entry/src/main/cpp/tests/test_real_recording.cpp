@@ -60,3 +60,27 @@ TEST(real_phone_recording_learns_the_first_alarm_and_recognises_the_repeats) {
     CHECK(learned);
     CHECK(repeats == 2);  // plays 2 and 3 of the recording
 }
+
+// Two 6 s takes of the same sound (a double 1800 Hz beep) recorded by the phone microphone in a noisy room, exactly as
+// the Teach flow records them. Room noise above the trainer's own cut threshold used to make the takes disagree.
+TEST(real_phone_takes_of_one_sound_can_be_taught) {
+    std::vector<int16_t> pcm;
+    const bool loaded = LoadWav("entry/src/main/cpp/tests/data/phone_teach_takes.wav", &pcm);
+    CHECK(loaded);
+    if (!loaded || pcm.size() != 192000) return;
+    const std::vector<int16_t> take1(pcm.begin(), pcm.begin() + 96000);
+    const std::vector<int16_t> take2(pcm.begin() + 96000, pcm.end());
+
+    sns::SoundEngine engine(sns::kSampleRate);
+    CHECK(engine.CheckTake(take1).ok);
+    CHECK(engine.CheckTake(take2).ok);
+    const auto taught = engine.TrainFromTakes("snd-9", {take1, take2});
+    CHECK(taught.ok);
+    if (!taught.ok) std::printf("    teach failed: %s\n", taught.message.c_str());
+    if (taught.profile.beepCount != 2) {
+        std::printf("    profile: beeps=%d duration=%.2f hz=%.0f rate=%.2f\n", taught.profile.beepCount,
+                    taught.profile.durationSec, taught.profile.dominantHz, taught.profile.beepsPerSec);
+    }
+    CHECK(taught.profile.beepCount == 2);
+    CHECK_NEAR(taught.profile.dominantHz, 1800.0, 60.0);
+}

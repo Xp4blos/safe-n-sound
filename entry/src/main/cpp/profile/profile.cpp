@@ -11,6 +11,7 @@ namespace sns {
 namespace {
 constexpr float kActiveAboveBackgroundDb = 12.0f;
 constexpr float kMinActiveLevelDb = -60.0f;
+constexpr float kBelowPeakDb = 15.0f;  // frames more than this below the loudest frame are not part of the sound
 constexpr int kSegmentGapFrames = 3;       // fewer inactive frames than this keep one segment
 constexpr double kContinuousSec = 2.5;     // a single stretch at least this long is continuous
 constexpr float kSweepRelativeRange = 0.15f;
@@ -36,7 +37,9 @@ SoundProfile DescribeSound(const int16_t* pcm, size_t sampleCount, int sampleRat
 
     std::vector<float> levels;
     for (const auto& f : frames) levels.push_back(f.levelDb);
-    const float threshold = std::max(Percentile(levels, 0.2f) + kActiveAboveBackgroundDb, kMinActiveLevelDb);
+    const float peak = *std::max_element(levels.begin(), levels.end());
+    const float threshold = std::max(std::max(Percentile(levels, 0.2f) + kActiveAboveBackgroundDb, kMinActiveLevelDb),
+                                     peak - kBelowPeakDb);
 
     std::vector<bool> active(frames.size());
     int first = -1, last = -1;

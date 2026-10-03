@@ -25,6 +25,7 @@ export struct ListenTab {
   @Prop alertRecord: SoundRecord | undefined = undefined;
   onToggle: () => void = (): void => {};
   onTeach: () => void = (): void => {};
+  onDismissAlert: () => void = (): void => {};
 
   private isListening(): boolean {
     return this.state === 'listening';
@@ -165,14 +166,10 @@ export struct ListenTab {
   }
 
   build() {
+    Stack({ alignContent: Alignment.Top }) {
     Scroll() {
       Column({ space: 18 }) {
         this.header()
-
-        // A named sound was just heard: the card sits at the very top so it is visible without scrolling.
-        if (this.alertRecord !== undefined) {
-          this.alertCard(this.alertRecord)
-        }
 
         SpectrumView({ columns: this.columns, marks: this.marks })
 
@@ -240,5 +237,21 @@ export struct ListenTab {
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
+
+    // A named sound was just heard: the card floats over the top of the screen, so it is always visible and does not
+    // push the buttons down. Tap it to dismiss.
+    if (this.alertRecord !== undefined) {
+      Column() {
+        this.alertCard(this.alertRecord)
+      }
+      .width('100%')
+      .padding({ left: 18, right: 18, top: 78 })
+      .onClick((): void => {
+        this.onDismissAlert();
+      })
+    }
+    }
+    .width('100%')
+    .height('100%')
   }
 }

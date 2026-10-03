@@ -387,6 +387,9 @@ struct Index {
           },
           onTeach: (): void => {
             this.openTeach();
+          },
+          onDismissAlert: (): void => {
+            this.alertRecord = undefined;
           }
         })
       }
