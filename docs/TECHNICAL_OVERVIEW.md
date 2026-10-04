@@ -176,7 +176,9 @@ background, because it competes for the audio device there.
 * **Built-in classes** (siren, scream, baby crying, beep, knock, loud sound) become history entries of their own,
   alert with their own vibration pattern and notification, and can be switched off one by one in Settings. A siren,
   scream or cry also "explains" the alarm tones heard in the seconds before it, so no unknown sound is created for them.
-  A loud sound is held for 3 s because the first seconds of a siren look like one.
+  A loud sound or a beep is held for 3 s, because the first seconds of a siren look like a loud sound, and the first beeps
+  of a learned sound look like a chirp until the match is complete: if a recognised sound or a siren explains them they are
+  dropped, otherwise they are reported after the hold.
 * **Self-noise guard.** The phone's own noise must not be heard as a knock or a loud sound: while it vibrates (plus a
   1.5 s tail) and for 1.2 s after a tap on the screen, knocks and loud sounds are ignored.
 
