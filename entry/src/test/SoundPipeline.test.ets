@@ -279,6 +279,36 @@ export default function soundPipelineTest() {
       expect(rig.listener.alerts.length).assertEqual(1);
     });
 
+    it('a_beep_inside_a_recognised_sound_is_not_also_reported_as_a_chirp', 0, () => {
+      // From a real run: the first beep of a taught sound is a chirp for the engine; the match comes seconds later.
+      const rig = new Rig().withKnownSound('Microwave alarm');
+      rig.pipeline.handle([builtIn('chirp', 10)], T0);
+      rig.pipeline.handle([builtIn('chirp', 11.2)], T0 + 1200);
+      rig.pipeline.handle([custom('snd-1', 9.6, 12.5)], T0 + 2500);
+      rig.pipeline.tick(T0 + 10000);
+      expect(rig.alerts.classPatterns.length).assertEqual(0);
+      expect(rig.alerts.namedPatterns).assertEqual(1);
+      expect(rig.catalog.records().length).assertEqual(1);
+    });
+
+    it('a_chirp_on_its_own_is_reported_after_the_short_hold', 0, () => {
+      const rig = new Rig();
+      rig.pipeline.handle([builtIn('chirp', 10)], T0);
+      expect(rig.alerts.classPatterns.length).assertEqual(0); // still held
+      rig.pipeline.tick(T0 + 3500);
+      expect(rig.alerts.classPatterns.join(',')).assertEqual('chirp');
+    });
+
+    it('chirps_that_come_with_a_siren_belong_to_it', 0, () => {
+      const rig = new Rig();
+      rig.pipeline.handle([builtIn('chirp', 10.5)], T0 + 500);
+      rig.pipeline.handle([builtIn('siren', 12.1)], T0 + 2100);
+      rig.pipeline.handle([builtIn('chirp', 13.4)], T0 + 3400); // the wail still going on after the siren was confirmed
+      rig.pipeline.tick(T0 + 10000);
+      expect(rig.alerts.classPatterns.join(',')).assertEqual('siren');
+      expect(rig.catalog.records().length).assertEqual(1);
+    });
+
     it('a_loud_sound_that_turns_out_to_be_a_siren_is_not_reported_as_loud', 0, () => {
       // The engine reports the onset of a siren as a loud sound first and confirms the siren about 2 s later.
       const rig = new Rig();

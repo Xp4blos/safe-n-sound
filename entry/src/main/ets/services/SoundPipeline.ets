@@ -61,6 +61,7 @@ export class SoundPipeline {
   static readonly EXPLAIN_MARGIN_SEC: number = 0.6;
   // The engine reports the first ~2 s of a siren as a loud sound; a loud sound is held until it is clear it is not one.
   static readonly LOUD_HOLD_MS: number = 3000;
+  static readonly SIREN_AHEAD_SEC: number = 3; // the sound goes on after the engine confirmed it
 
   private catalog: SoundCatalog;
   private engine: EnginePort;
@@ -149,11 +150,13 @@ export class SoundPipeline {
   }
 
   // A recognised sound explains the alarm events inside its window (also those that arrive just after the match).
-  private explain(ev: EngineEvent, backSec: number = 0): void {
+  private explain(ev: EngineEvent, backSec: number = 0, aheadSec: number = 0): void {
     const start = backSec > 0 ? ev.timeSec - backSec : ev.startSec;
     const from = start - SoundPipeline.EXPLAIN_MARGIN_SEC;
-    const to = ev.timeSec + SoundPipeline.EXPLAIN_MARGIN_SEC;
+    const to = ev.timeSec + SoundPipeline.EXPLAIN_MARGIN_SEC + aheadSec;
     this.held = this.held.filter((h: HeldAlarm): boolean => h.event.timeSec < from || h.event.timeSec > to);
+    // a beep or loud sound inside the window of a recognised sound belongs to it
+    this.heldLoud = this.heldLoud.filter((h: HeldLoud): boolean => h.event.timeSec < from || h.event.timeSec > to);
     const matched: SoundWindow = { fromSec: from, toSec: to };
     this.explained.push(matched);
     if (this.explained.length > 8) {
@@ -170,16 +173,18 @@ export class SoundPipeline {
     if (cls.selfVibrationSensitive && this.alerts.isSelfNoise(nowMs)) {
       return; // the phone's own vibration or a tap on its screen is not a knock or a loud sound
     }
-    if (cls.key === 'loud_sound') {
+    if (cls.key === 'loud_sound' || cls.key === 'chirp') {
+      if (this.isExplained(ev.timeSec)) {
+        return; // a beep or loud sound that is part of a sound that was already recognised
+      }
       const held: HeldLoud = { event: ev, dueMs: nowMs + SoundPipeline.LOUD_HOLD_MS };
       this.heldLoud.push(held);
       return;
     }
     this.listener.onDetection(nowMs);
     if (cls.explainBackSec > 0) {
-      this.explain(ev, cls.explainBackSec); // a siren, scream or cry is also heard as alarm tones at first
-      const from = ev.timeSec - cls.explainBackSec - SoundPipeline.EXPLAIN_MARGIN_SEC;
-      this.heldLoud = this.heldLoud.filter((h: HeldLoud): boolean => h.event.timeSec < from);
+      // a siren, scream or cry is also heard as alarm tones, beeps and a loud sound at first, and goes on for a while
+      this.explain(ev, cls.explainBackSec, SoundPipeline.SIREN_AHEAD_SEC);
     }
     this.report(cls, nowMs);
   }
@@ -193,10 +198,15 @@ export class SoundPipeline {
       return;
     }
     this.heldLoud = this.heldLoud.filter((h: HeldLoud): boolean => h.dueMs > nowMs);
-    const cls = SoundClasses.forEvent('loud_sound');
-    if (cls !== undefined && this.settings.isClassOn(cls.key)) {
+    const reported: string[] = [];
+    for (const h of due) {
+      const cls = SoundClasses.forEvent(h.event.type);
+      if (cls === undefined || reported.includes(cls.key) || !this.settings.isClassOn(cls.key)) {
+        continue; // several beeps or loud sounds released together count as one
+      }
+      reported.push(cls.key);
       this.listener.onDetection(nowMs);
-      this.report(cls, nowMs); // one loud sound per release; several within the hold count as one
+      this.report(cls, nowMs);
     }
   }
 
