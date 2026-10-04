@@ -1,3 +1,4 @@
+import { ServiceHub } from '../services/ServiceHub';
 import { SoundCatalog } from '../model/SoundCatalog';
 import { SoundRecord } from '../model/SoundModels';
 import { EnvelopeMini } from './EnvelopeMini';
@@ -113,5 +114,8 @@ export struct SoundDetailDialog {
     .borderRadius(30)
     .border({ width: 1, color: $r('app.color.border') })
     .shadow({ radius: 30, color: '#55000000', offsetY: 10 })
+    .onTouch((): void => {
+      ServiceHub.onTouch();
+    })
   }
 }

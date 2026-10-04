@@ -39,11 +39,13 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     // Ability has brought to foreground
+    ServiceHub.onForeground();
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
   }
 
   onBackground(): void {
     // Unless the user chose to keep listening in the background, release the microphone when the app leaves the screen.
+    ServiceHub.onBackground();
     ServiceHub.audio?.onBackground();
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
   }

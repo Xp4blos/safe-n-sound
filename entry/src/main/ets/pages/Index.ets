@@ -182,6 +182,17 @@ struct Index {
     };
     this.audioService = service;
     ServiceHub.audio = service;
+    ServiceHub.onTouch = (): void => {
+      this.alerts.noteTouch(Date.now());
+    };
+    ServiceHub.onBackground = (): void => {
+      speech.stop(); // the system recogniser disturbs the microphone while the app is not on screen
+    };
+    ServiceHub.onForeground = (): void => {
+      if (this.listenState === 'listening' && settings.speechEnabled) {
+        speech.start();
+      }
+    };
     if (settings.autoStart) {
       this.toggleListening();
     }
@@ -657,6 +668,9 @@ struct Index {
     .backgroundColor($r('app.color.page_bg'))
     .onChange((index: number): void => {
       this.currentTab = index;
+    })
+    .onTouch((): void => {
+      this.alerts.noteTouch(Date.now()); // a tap on the screen is heard as a knock
     })
   }
 }

@@ -1,3 +1,4 @@
+import { ServiceHub } from '../services/ServiceHub';
 // "I've heard this sound before. Do you want to name it?" with the three choices of the spec.
 @CustomDialog
 export struct PromptDialog {
@@ -46,5 +47,8 @@ export struct PromptDialog {
     .borderRadius(30)
     .border({ width: 1, color: $r('app.color.border') })
     .shadow({ radius: 30, color: '#55000000', offsetY: 10 })
+    .onTouch((): void => {
+      ServiceHub.onTouch();
+    })
   }
 }

@@ -3,6 +3,7 @@ import { notificationManager } from '@kit.NotificationKit';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, wantAgent, WantAgent } from '@kit.AbilityKit';
+import { SelfNoiseGuard } from '../model/SelfNoiseGuard';
 import { SoundClass } from '../model/SoundClasses';
 import { KeywordAlertPort } from './CaptionBoard';
 import { AlertPort } from './SoundPipeline';
@@ -13,7 +14,6 @@ const SHORT_PULSE_MS: number = 300;
 const LONG_PULSE_MS: number = 500;
 const LONG_PULSE_COUNT: number = 3;
 const LONG_PULSE_GAP_MS: number = 250;
-const SELF_VIBRATION_TAIL_MS: number = 1500; // the motor's sound lingers a little after it stops
 
 function twoDigits(n: number): string {
   return n < 10 ? '0' + n : n.toString();
@@ -34,7 +34,7 @@ function sleep(ms: number): Promise<void> {
 // problem must never interrupt listening.
 export class AlertService implements AlertPort, KeywordAlertPort {
   private nextNotificationId: number = 1000;
-  private vibratingUntilMs: number = 0;
+  private noise: SelfNoiseGuard = new SelfNoiseGuard();
   private vibrationToken: number = 0;
   private keepAlive: boolean = false;
 
@@ -128,14 +128,20 @@ export class AlertService implements AlertPort, KeywordAlertPort {
     for (const ms of pattern) {
       total += ms;
     }
-    this.vibratingUntilMs = Date.now() + total + SELF_VIBRATION_TAIL_MS;
+    this.noise.noteVibration(Date.now(), total);
     const mine = ++this.vibrationToken;
     this.runPattern(pattern, mine);
   }
 
-  // True while the phone is vibrating (and a moment after): its own buzz must not be heard as a knock or loud sound.
-  isVibrating(nowMs: number): boolean {
-    return nowMs < this.vibratingUntilMs;
+  // The screen was touched: the tap is heard by the microphone as a knock for a moment.
+  noteTouch(nowMs: number): void {
+    this.noise.noteTouch(nowMs);
+  }
+
+  // True while the phone makes noise itself (it vibrates, or a finger just tapped the screen): that is not a knock or a
+  // loud sound.
+  isSelfNoise(nowMs: number): boolean {
+    return this.noise.isNoisy(nowMs);
   }
 
   private async runPattern(pattern: number[], token: number): Promise<void> {

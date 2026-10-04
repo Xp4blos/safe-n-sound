@@ -1,3 +1,4 @@
+import { ServiceHub } from '../services/ServiceHub';
 export interface TakeStatus {
   ok: boolean;
   message: string; // why the take was not usable, when !ok
@@ -143,5 +144,8 @@ export struct TeachDialog {
     .borderRadius(30)
     .border({ width: 1, color: $r('app.color.border') })
     .shadow({ radius: 30, color: '#55000000', offsetY: 10 })
+    .onTouch((): void => {
+      ServiceHub.onTouch();
+    })
   }
 }

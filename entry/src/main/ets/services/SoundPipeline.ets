@@ -15,7 +15,7 @@ export interface AlertPort {
   notifyPrompt(): void; // "I've heard this sound before. Do you want to name it?"
   vibrateClass(cls: SoundClass): void; // the class's own pattern
   notifyClass(cls: SoundClass, timeMs: number): void;
-  isVibrating(nowMs: number): boolean; // the phone itself is (or just was) vibrating
+  isSelfNoise(nowMs: number): boolean; // the phone itself is making noise: it vibrates, or the screen was just touched
 }
 
 export interface SavePort {
@@ -167,8 +167,8 @@ export class SoundPipeline {
     if (cls === undefined || !this.settings.isClassOn(cls.key)) {
       return;
     }
-    if (cls.selfVibrationSensitive && this.alerts.isVibrating(nowMs)) {
-      return; // the phone's own vibration is not a knock or a loud sound
+    if (cls.selfVibrationSensitive && this.alerts.isSelfNoise(nowMs)) {
+      return; // the phone's own vibration or a tap on its screen is not a knock or a loud sound
     }
     if (cls.key === 'loud_sound') {
       const held: HeldLoud = { event: ev, dueMs: nowMs + SoundPipeline.LOUD_HOLD_MS };

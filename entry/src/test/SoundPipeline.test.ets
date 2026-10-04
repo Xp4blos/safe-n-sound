@@ -43,7 +43,7 @@ class FakeAlerts implements AlertPort {
   prompts: number = 0;
   classPatterns: string[] = [];
   classNotes: string[] = [];
-  vibrating: boolean = false;
+  vibrating: boolean = false; // the phone's own noise: its vibration or a touch on the screen
 
   vibrateUnknown(): void {
     this.unknownPulses++;
@@ -69,7 +69,7 @@ class FakeAlerts implements AlertPort {
     this.classNotes.push(cls.title + '@' + timeMs);
   }
 
-  isVibrating(nowMs: number): boolean {
+  isSelfNoise(nowMs: number): boolean {
     return this.vibrating;
   }
 }
@@ -253,7 +253,7 @@ export default function soundPipelineTest() {
       expect(rig.catalog.records()[0].timesHeard).assertEqual(3);
     });
 
-    it('knocks_and_loud_sounds_are_ignored_while_the_phone_vibrates_but_sirens_are_not', 0, () => {
+    it('knocks_and_loud_sounds_are_ignored_while_the_phone_makes_noise_itself_but_sirens_are_not', 0, () => {
       const rig = new Rig();
       rig.alerts.vibrating = true;
       rig.pipeline.handle([builtIn('knock', 10), builtIn('loud_sound', 11), builtIn('siren', 12)], T0);
