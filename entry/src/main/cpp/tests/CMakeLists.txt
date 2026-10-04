@@ -16,7 +16,7 @@ add_executable(sns_tests ${SNS_TEST_SOURCES})
 target_link_libraries(sns_tests PRIVATE sns_profile ${SNS_WRAPPER_LIB})
 
 # The teammate's own tests and CLI, built against the vendored engine.
-foreach(t test_core test_custom test_safety)
+foreach(t test_core test_custom test_safety test_sounds speech_test)
   add_executable(ambient_${t} ../ambient/tests/${t}.cpp)
   target_link_libraries(ambient_${t} PRIVATE ambient_core)
 endforeach()

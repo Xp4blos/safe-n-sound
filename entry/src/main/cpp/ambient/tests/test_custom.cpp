@@ -246,6 +246,7 @@ static void test_hold_behaviour() {
     {
         Config c;
         c.custom_hold_s = 0.f;
+        c.detect_chirp = false;  // otherwise the beep is (correctly) a Chirp, not a Knock
         Detector d(c);
         d.add_custom_sound(learn(c, "f", {framed(fridge(0.25, r), r)}));
         const auto ev = run(d, p);

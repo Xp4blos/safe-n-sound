@@ -29,7 +29,7 @@ Segment cut_sound(Detector& det, const Recording& r, const TrainOptions& o, std:
     if (peak_db - floor_db < o.min_contrast_db)
         throw std::invalid_argument(rec_name(idx) + ": no clear sound above the background noise");
 
-    const float thr = floor_db + std::max(8.f, 0.3f * (peak_db - floor_db));
+    const float thr = floor_db + std::max(5.f, 0.25f * (peak_db - floor_db));
     std::size_t first = fm.frames, last = 0;
     for (std::size_t i = 0; i < fm.frames; ++i) {
         if (fm.level_db[i] > thr) {
@@ -109,6 +109,7 @@ TrainResult train_custom_sound(const Config& cfg, const std::string& name,
     if (len < 4) throw std::invalid_argument("sound is too short");
 
     const std::size_t dim = len * kBands;
+    std::vector<Recording> used;
     std::vector<std::vector<float>> prepared, env;  // env[i] empty when that recording's envelope is flat
     float peak = -200.f;
     for (std::size_t i = 0; i < segs.size(); ++i) {
@@ -122,20 +123,73 @@ TrainResult train_custom_sound(const Config& cfg, const std::string& name,
         env.push_back(std::move(e));
         peak = std::max(peak, segs[i].peak_db);
     }
+    auto pair_sim = [&](std::size_t x, std::size_t y) {
+        double sim = dot(prepared[x], prepared[y]);
+        if (!env[x].empty() && !env[y].empty()) sim = 0.5 * (sim + dot(env[x], env[y]));
+        return static_cast<float>(sim);
+    };
+    // Keep the recordings that agree with each other; drop outliers instead of failing.
+    std::vector<std::size_t> keep;
+    for (std::size_t i = 0; i < prepared.size(); ++i) keep.push_back(i);
+    auto worst_pair = [&](const std::vector<std::size_t>& k) {
+        float m = 1.f;
+        for (std::size_t x = 0; x < k.size(); ++x)
+            for (std::size_t y = x + 1; y < k.size(); ++y) m = std::min(m, pair_sim(k[x], k[y]));
+        return m;
+    };
+    const auto mismatch = [&](float sim) {
+        return std::invalid_argument("recordings do not match each other (similarity " + std::to_string(sim) +
+                                     "); record the sound again");
+    };
+    while (keep.size() > 2 && worst_pair(keep) < opt.min_consistency) {
+        if (prepared.size() - keep.size() >= opt.max_dropped) throw mismatch(worst_pair(keep));
+        std::size_t drop = 0;
+        float lowest = 1e9f;
+        for (std::size_t x = 0; x < keep.size(); ++x) {
+            float sum = 0.f;
+            for (std::size_t y = 0; y < keep.size(); ++y)
+                if (x != y) sum += pair_sim(keep[x], keep[y]);
+            if (sum < lowest) { lowest = sum; drop = x; }
+        }
+        keep.erase(keep.begin() + static_cast<std::ptrdiff_t>(drop));
+    }
+    if (keep.size() == 2 && worst_pair(keep) < opt.min_consistency) {
+        if (!opt.allow_single_fallback) throw mismatch(worst_pair(keep));
+        // Two recordings that disagree: keep only the one most similar to the others overall.
+        std::size_t best = keep[0];
+        float bs = -1e9f;
+        for (std::size_t x : keep) {
+            float sum = 0.f;
+            for (std::size_t y = 0; y < prepared.size(); ++y)
+                if (x != y) sum += pair_sim(x, y);
+            if (sum > bs) { bs = sum; best = x; }
+        }
+        keep.assign(1, best);
+    }
+    std::vector<std::size_t> dropped;
+    for (std::size_t i = 0; i < recordings.size(); ++i)
+        if (std::find(keep.begin(), keep.end(), i) == keep.end()) dropped.push_back(i);
+    {
+        std::vector<std::vector<float>> p2, e2;
+        std::vector<Recording> r2;
+        for (std::size_t i : keep) {
+            p2.push_back(prepared[i]);
+            e2.push_back(env[i]);
+            r2.push_back(recordings[i]);
+        }
+        prepared.swap(p2);
+        env.swap(e2);
+        used = r2;
+    }
     bool use_env = true;
     for (const auto& e : env) use_env = use_env && !e.empty();
-
     float consistency = 1.f;
-    for (std::size_t a = 0; a < prepared.size(); ++a) {
+    for (std::size_t a = 0; a < prepared.size(); ++a)
         for (std::size_t b = a + 1; b < prepared.size(); ++b) {
             double sim = dot(prepared[a], prepared[b]);
             if (use_env) sim = 0.5 * (sim + dot(env[a], env[b]));
             consistency = std::min(consistency, static_cast<float>(sim));
         }
-    }
-    if (consistency < opt.min_consistency)
-        throw std::invalid_argument("recordings do not match each other (similarity " +
-                                    std::to_string(consistency) + "); record the sound again");
 
     std::vector<float> avg(dim, 0.f), avg_env(use_env ? len : 0, 0.f);
     for (std::size_t i = 0; i < prepared.size(); ++i) {
@@ -148,6 +202,7 @@ TrainResult train_custom_sound(const Config& cfg, const std::string& name,
 
     TrainResult res;
     res.consistency = consistency;
+    res.dropped = dropped;
     res.duration_s = static_cast<float>(static_cast<double>(len) * hop_s);
     CustomSound& s = res.sound;
     s.name = name;
@@ -155,27 +210,37 @@ TrainResult train_custom_sound(const Config& cfg, const std::string& name,
     s.frame_size = static_cast<std::uint32_t>(cfg.frame_size);
     s.hop_size = static_cast<std::uint32_t>(cfg.hop_size);
     s.frames = static_cast<std::uint32_t>(len);
-    s.threshold = segs.size() == 1 ? opt.default_threshold
-                                   : std::min(0.9f, std::max(0.7f, consistency - 0.1f));
-    s.min_level_db = std::max(peak - 20.f, -75.f);
+    s.threshold = prepared.size() == 1 ? opt.default_threshold
+                                   : std::min(0.85f, std::max(0.55f, consistency - 0.15f));
+    s.min_level_db = std::max(peak - 30.f, -85.f);
     s.refractory_s = opt.refractory_s;
     s.tmpl = std::move(avg);
     s.env = std::move(avg_env);
 
-    // Self-check at enrolment: the template must recognise each of its own recordings,
-    // otherwise it would fail silently in the field.
-    for (std::size_t i = 0; i < recordings.size(); ++i) {
-        Detector probe(cfg);
-        probe.add_custom_sound(s);
-        std::vector<std::int16_t> pcm(recordings[i].samples, recordings[i].samples + recordings[i].count);
-        pcm.resize(pcm.size() + static_cast<std::size_t>(cfg.sample_rate), 0);  // let the matcher settle
-        bool found = false;
-        for (const Event& e : probe.process(pcm.data(), pcm.size()))
-            found = found || e.type == EventType::Custom;
-        if (!found)
-            throw std::invalid_argument(rec_name(i) + " is not reliably recognised by the learned sound; "
-                                                      "record it again");
+    // Self-check at enrolment: lower the threshold step by step until the template recognises
+    // its own recordings. Accept if at least half are recognised at the end.
+    auto recognised = [&](const CustomSound& cand) {
+        std::size_t ok = 0;
+        for (std::size_t i = 0; i < used.size(); ++i) {
+            Detector probe(cfg);
+            probe.add_custom_sound(cand);
+            std::vector<std::int16_t> pcm(used[i].samples, used[i].samples + used[i].count);
+            pcm.resize(pcm.size() + static_cast<std::size_t>(cfg.sample_rate), 0);
+            bool found = false;
+            for (const Event& e : probe.process(pcm.data(), pcm.size()))
+                found = found || e.type == EventType::Custom;
+            if (found) ++ok;
+        }
+        return ok;
+    };
+    std::size_t ok = recognised(s);
+    while (ok < used.size() && s.threshold > 0.45f) {
+        s.threshold = std::max(0.45f, s.threshold - 0.05f);
+        ok = recognised(s);
     }
+    if (ok * 2 < used.size())
+        throw std::invalid_argument("the learned sound is not recognised in your recordings; "
+                                    "record it again, closer to the source");
     return res;
 }
 

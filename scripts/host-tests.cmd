@@ -12,7 +12,7 @@ cmake -S entry/src/main/cpp/tests -B build-host/tests -G Ninja -DCMAKE_CXX_COMPI
 cmake --build build-host/tests || exit /b 1
 set RC=0
 build-host\tests\sns_tests.exe || set RC=1
-for %%T in (test_core test_custom test_safety) do (
+for %%T in (test_core test_custom test_safety test_sounds speech_test) do (
   build-host\tests\ambient_%%T.exe >nul 2>&1 && echo [PASS] ambient_%%T || (echo [FAIL] ambient_%%T & set RC=1)
 )
 set S=entry\src\main\cpp\ambient\tests\data

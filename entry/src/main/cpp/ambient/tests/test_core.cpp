@@ -363,8 +363,15 @@ static void test_custom_chunking_and_reset() {
 static void test_custom_training_errors() {
     std::puts("custom: unusable recordings and mismatching configs are rejected");
     Lcg r;
+    // Strict mode (Safe'n'Sound): disagreeing recordings are rejected instead of keeping just one of them.
     auto rejects = [](const std::vector<Pcm>& recs) {
-        try { learn("x", recs); } catch (const std::invalid_argument&) { return true; }
+        try {
+            std::vector<Recording> v;
+            for (const auto& p : recs) v.push_back({p.data(), p.size()});
+            TrainOptions strict;
+            strict.allow_single_fallback = false;
+            train_custom_sound(Config{}, "x", v, strict);
+        } catch (const std::invalid_argument&) { return true; }
         return false;
     };
     CHECK(rejects({noise(3.0, 0.003, r)}));                                   // nothing but background

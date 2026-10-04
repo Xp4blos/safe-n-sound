@@ -28,6 +28,11 @@ std::vector<ambient::Recording> AsRecordings(const std::vector<std::vector<int16
 // noisy room random noise crosses that threshold, so two takes of the same sound get different cuts and are rejected
 // as "not matching". Before training, a take is therefore reduced to its clearest tonal stretch: everything outside
 // it (plus a short margin) is silenced. A take without any tonal sound is returned unchanged.
+// Teaching: two recordings must be at least this alike (measured on 25 real phone recordings of five signals: 0.55
+// accepted 46/50 pairs and 50/50 triples of the same sound and 0/50 pairs of different sounds; 0.45 accepted 4/50 of
+// the different ones).
+constexpr float kTeachMinConsistency = 0.55f;
+
 constexpr double kGateMarginSec = 0.25;
 constexpr double kGateMaxGapSec = 1.0;    // tonal frames closer than this belong to one sound
 constexpr double kGateMinSoundSec = 0.25;
@@ -162,6 +167,9 @@ LearnResult SoundEngine::Train(const std::string& label, const std::vector<ambie
     try {
         ambient::TrainOptions options;
         options.default_threshold = matchThreshold_;
+        options.allow_single_fallback = false;  // never silently keep one of two different sounds
+        options.max_dropped = 1;
+        options.min_consistency = kTeachMinConsistency;
         ambient::TrainResult tr = ambient::train_custom_sound(cfg_, label, recordings, options);
         // With several recordings the trainer picks a threshold of 0.7-0.9 from how well they agree; on a phone in a
         // real room that misses quieter repeats, so it is capped at the same value as for a single recording.
@@ -169,6 +177,7 @@ LearnResult SoundEngine::Train(const std::string& label, const std::vector<ambie
         if (registerSound) detector_.add_custom_sound(tr.sound);
         r.templateBytes = ambient::serialize(tr.sound);
         r.consistency = tr.consistency;
+        if (!tr.dropped.empty()) r.droppedTake = static_cast<int>(tr.dropped.front());
         r.profile = profile;
         r.ok = true;
     } catch (const std::exception& e) {
@@ -212,32 +221,10 @@ LearnResult SoundEngine::TrainFromTakes(const std::string& label, const std::vec
         const std::vector<int16_t> core = GateToTonalSound(takes[i], sampleRate_, 0.0);
         return DescribeSound(core.data(), core.size(), sampleRate_);
     };
-    const auto recordingsWithout = [&](size_t skip) {
-        std::vector<std::vector<int16_t>> kept;
-        for (size_t i = 0; i < gated.size(); ++i)
-            if (i != skip) kept.push_back(gated[i]);
-        return kept;
-    };
-
-    LearnResult all = Train(label, AsRecordings(gated), profileOf(0), true);
-    if (all.ok || takes.size() < 3) return all;
-
-    // One take that does not fit (a noise burst, a missed note) must not ruin the others: with three or more takes
-    // the best set that leaves one out is used, provided the rest agree with each other.
-    int bestSkip = -1;
-    float bestConsistency = -1.0f;
-    for (size_t skip = 0; skip < gated.size(); ++skip) {
-        const auto kept = recordingsWithout(skip);
-        const LearnResult trial = Train(label, AsRecordings(kept), SoundProfile{}, false);
-        if (trial.ok && trial.consistency > bestConsistency) {
-            bestConsistency = trial.consistency;
-            bestSkip = static_cast<int>(skip);
-        }
-    }
-    if (bestSkip < 0) return all;
-    const auto kept = recordingsWithout(static_cast<size_t>(bestSkip));
-    LearnResult r = Train(label, AsRecordings(kept), profileOf(bestSkip == 0 ? 1 : 0), true);
-    if (r.ok) r.droppedTake = bestSkip;
+    // With three or more takes the trainer leaves out one that disagrees (droppedTake); the profile then describes the
+    // first take that was kept.
+    LearnResult r = Train(label, AsRecordings(gated), profileOf(0), true);
+    if (r.ok && r.droppedTake == 0) r.profile = profileOf(1);
     return r;
 }
 
