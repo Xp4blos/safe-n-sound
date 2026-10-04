@@ -147,7 +147,9 @@ ProcessResult SoundEngine::Process(const int16_t* pcm, size_t sampleCount) {
                 ev.startSec = e.start_s;
                 ev.label = e.label;
             } else {
-                continue;  // knocks and loud sounds are not surfaced (see the design spec)
+                // chirp, cry, siren, scream, knock, loud_sound: surfaced as they are; the app decides which ones alert.
+                ev.type = ambient::to_string(e.type);
+                ev.startSec = e.time_s;
             }
             ev.timeSec = e.time_s;
             ev.confidence = e.confidence;

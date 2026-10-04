@@ -19,7 +19,8 @@ constexpr double kLearnAfterSec = 3.5;       // ... to this long after it
 constexpr float kLearnedMatchThreshold = 0.60f;  // similarity needed to recognise a learned sound again
                                                  // (the engine default 0.8 and 0.7 missed quieter real repeats on a phone)
 
-// Only "alarm" (a sustained narrow-band tone) and "custom" (a learned or taught sound recognised again).
+// type: "alarm" (a sustained narrow-band tone, the app learns it as an unknown sound), "custom" (a learned or taught
+// sound recognised again), or a built-in class: "chirp", "cry", "siren", "scream", "knock", "loud_sound".
 struct EngineEvent {
     std::string type;
     double timeSec = 0.0;   // engine stream time of the detection

@@ -35,7 +35,7 @@ TEST(engine_continuous_tone_is_one_alarm) {
     if (!events.empty()) CHECK_NEAR(events[0].freqHz, 3000.0, 60.0);
 }
 
-TEST(engine_hum_and_motor_bursts_make_no_events) {
+TEST(engine_hum_and_motor_bursts_make_no_alarms) {
     sns::SoundEngine engine(sns::kSampleRate);
     auto hum = Tone(120, 15.0, 0.05);
     const auto hum2 = Tone(300, 15.0, 0.04);
@@ -49,7 +49,11 @@ TEST(engine_hum_and_motor_bursts_make_no_events) {
         motor.insert(motor.end(), gap.begin(), gap.end());
     }
     sns::SoundEngine engine2(sns::kSampleRate);
-    CHECK(Feed(engine2, Concat({Noise(1.5, 0.003, 2), motor})).empty());
+    // The motor bursts are loud (like the phone's own vibration): they may be reported as loud sounds, which the app
+    // filters while it is vibrating, but never as an alarm or a recognised sound.
+    const auto motorEvents = Feed(engine2, Concat({Noise(1.5, 0.003, 2), motor}));
+    CHECK(Count(motorEvents, "alarm") == 0);
+    CHECK(Count(motorEvents, "custom") == 0);
 }
 
 TEST(engine_learns_a_detected_sound_and_recognises_it_again) {
@@ -187,4 +191,51 @@ TEST(engine_same_rhythm_at_another_pitch_is_not_the_learned_sound) {
     CHECK(Count(other, "custom") == 0);
     const auto same = Feed(engine, Take(BeepTrain(3000, 0.6, 0.3, 3, 0.2), 73, 4.0));  // quieter repeat
     CHECK(Count(same, "custom") == 1);
+}
+
+// ---- sound classes beyond the alarm (siren, chirp, loud sound, knock) --------------------------------------------
+
+namespace {
+// A tone whose pitch follows hz(t), phase-continuous.
+template <typename F>
+std::vector<int16_t> Sweep(double sec, F hz, double amp) {
+    const size_t n = static_cast<size_t>(sec * kSynthRate);
+    std::vector<int16_t> out(n);
+    double phase = 0.0;
+    for (size_t i = 0; i < n; ++i) {
+        phase += 2.0 * kSynthPi * hz(static_cast<double>(i) / kSynthRate) / kSynthRate;
+        out[i] = ToSample(amp * std::sin(phase));
+    }
+    return out;
+}
+}  // namespace
+
+TEST(engine_reports_a_wailing_siren_as_siren) {
+    sns::SoundEngine engine(sns::kSampleRate);
+    const auto wail = Sweep(8.0, [](double t) { return 1000.0 - 400.0 * std::cos(2.0 * kSynthPi * t / 3.5); }, 0.3);
+    const auto events = Feed(engine, Concat({Noise(1.5, 0.003, 11), wail, Noise(2.0, 0.003, 12)}));
+    CHECK(Count(events, "siren") == 1);
+}
+
+TEST(engine_reports_a_short_beep_as_a_chirp) {
+    sns::SoundEngine engine(sns::kSampleRate);
+    const auto events = Feed(engine, Concat({Noise(1.5, 0.003, 13), Tone(2500, 0.2, 0.3), Noise(2.0, 0.003, 14)}));
+    CHECK(Count(events, "chirp") == 1);
+    CHECK(Count(events, "alarm") == 0);
+}
+
+TEST(engine_reports_loud_noise_as_a_loud_sound) {
+    sns::SoundEngine engine(sns::kSampleRate);
+    const auto events = Feed(engine, Concat({Noise(1.5, 0.003, 15), Noise(2.0, 0.5, 16), Noise(2.0, 0.003, 17)}));
+    CHECK(Count(events, "loud_sound") == 1);
+}
+
+TEST(engine_reports_a_short_bang_as_a_knock) {
+    sns::SoundEngine engine(sns::kSampleRate);
+    std::vector<int16_t> bang = Noise(0.15, 0.7, 18);
+    for (size_t i = 0; i < bang.size(); ++i) {
+        bang[i] = static_cast<int16_t>(bang[i] * std::exp(-static_cast<double>(i) / 800.0));
+    }
+    const auto events = Feed(engine, Concat({Noise(1.5, 0.003, 19), bang, Noise(2.0, 0.003, 20)}));
+    CHECK(Count(events, "knock") == 1);
 }
