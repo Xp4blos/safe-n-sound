@@ -43,7 +43,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onBackground(): void {
-    // Foreground-only listening: release the microphone as soon as the app leaves the screen.
+    // Unless the user chose to keep listening in the background, release the microphone when the app leaves the screen.
     ServiceHub.audio?.onBackground();
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
   }

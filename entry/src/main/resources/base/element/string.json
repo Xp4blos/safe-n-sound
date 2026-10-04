@@ -275,6 +275,138 @@
     {
       "name": "section_sounds",
       "value": "Sounds heard"
+    },
+    {
+      "name": "tab_captions",
+      "value": "Captions"
+    },
+    {
+      "name": "tab_settings",
+      "value": "Settings"
+    },
+    {
+      "name": "captions_title",
+      "value": "Captions"
+    },
+    {
+      "name": "captions_live",
+      "value": "Listening for speech"
+    },
+    {
+      "name": "captions_idle",
+      "value": "Start listening on the Listen tab to get live captions"
+    },
+    {
+      "name": "captions_off",
+      "value": "Speech is switched off in Settings"
+    },
+    {
+      "name": "captions_note",
+      "value": "The system recogniser understands Mandarin, so captions may show Chinese characters. English words such as help or watch out still raise alerts."
+    },
+    {
+      "name": "captions_empty",
+      "value": "Nothing heard yet"
+    },
+    {
+      "name": "captions_clear",
+      "value": "Clear"
+    },
+    {
+      "name": "keywords_title",
+      "value": "Keywords"
+    },
+    {
+      "name": "keywords_hint",
+      "value": "New word or phrase"
+    },
+    {
+      "name": "keywords_add",
+      "value": "Add"
+    },
+    {
+      "name": "keywords_remove",
+      "value": "Remove"
+    },
+    {
+      "name": "vib_sos",
+      "value": "SOS"
+    },
+    {
+      "name": "vib_rapid",
+      "value": "Rapid"
+    },
+    {
+      "name": "vib_long",
+      "value": "Long"
+    },
+    {
+      "name": "vib_double",
+      "value": "Double"
+    },
+    {
+      "name": "simulate_title",
+      "value": "Test input (simulated)"
+    },
+    {
+      "name": "simulate_hint",
+      "value": "Type words as if they were heard"
+    },
+    {
+      "name": "simulate_btn",
+      "value": "Simulate"
+    },
+    {
+      "name": "settings_title",
+      "value": "Settings"
+    },
+    {
+      "name": "settings_classes",
+      "value": "Alert me about"
+    },
+    {
+      "name": "settings_how",
+      "value": "How to alert"
+    },
+    {
+      "name": "settings_listening",
+      "value": "Listening"
+    },
+    {
+      "name": "settings_speech",
+      "value": "Speech"
+    },
+    {
+      "name": "set_vibrate",
+      "value": "Vibrate"
+    },
+    {
+      "name": "set_notify",
+      "value": "Notifications"
+    },
+    {
+      "name": "set_background",
+      "value": "Keep listening in the background"
+    },
+    {
+      "name": "set_autostart",
+      "value": "Start listening when the app opens"
+    },
+    {
+      "name": "set_speech",
+      "value": "Captions and keywords"
+    },
+    {
+      "name": "set_partial",
+      "value": "React to words while still speaking"
+    },
+    {
+      "name": "set_unknown_note",
+      "value": "Learned and taught sounds always alert. Switch them off one by one in My sounds."
+    },
+    {
+      "name": "keyword_card",
+      "value": "Heard a keyword"
     }
   ]
 }

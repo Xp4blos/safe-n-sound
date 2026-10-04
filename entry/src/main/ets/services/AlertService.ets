@@ -4,6 +4,7 @@ import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, wantAgent, WantAgent } from '@kit.AbilityKit';
 import { SoundClass } from '../model/SoundClasses';
+import { KeywordAlertPort } from './CaptionBoard';
 import { AlertPort } from './SoundPipeline';
 
 const LOG_DOMAIN: number = 0x3201;
@@ -31,7 +32,7 @@ function sleep(ms: number): Promise<void> {
 
 // Vibration, notifications and the background-run request. Everything degrades silently when unavailable: an alert
 // problem must never interrupt listening.
-export class AlertService implements AlertPort {
+export class AlertService implements AlertPort, KeywordAlertPort {
   private nextNotificationId: number = 1000;
   private vibratingUntilMs: number = 0;
   private vibrationToken: number = 0;

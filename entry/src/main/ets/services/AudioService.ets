@@ -2,6 +2,7 @@ import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import { audio } from '@kit.AudioKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { AppSettings } from '../model/AppSettings';
 import { LearnOutcome } from '../model/SoundModels';
 import { AlertService } from './AlertService';
 import { NativeEngine } from './NativeEngine';
@@ -25,10 +26,15 @@ export class AudioService {
   onLevel: (db: number) => void = (db: number): void => {};
   onSpectrum: (bands: number[]) => void = (bands: number[]): void => {};
   onState: (state: ListenState) => void = (state: ListenState): void => {};
+  // Every microphone buffer, for the speech recogniser (16 kHz mono 16-bit).
+  onPcm: (pcm: ArrayBuffer) => void = (pcm: ArrayBuffer): void => {};
+  // Whether listening continues when the app leaves the screen (the background task is held).
+  keepInBackground: () => boolean = (): boolean => false;
 
   private store: SoundStore;
   private alerts: AlertService;
   private listener: PipelineListener;
+  private settings: AppSettings;
   private state: ListenState = 'idle';
   private capturer: audio.AudioCapturer | undefined;
   private engine: NativeEngine | undefined;
@@ -43,10 +49,11 @@ export class AudioService {
   private takeBytes: number = 0;
   private takeWantedBytes: number = 0;
 
-  constructor(store: SoundStore, alerts: AlertService, listener: PipelineListener) {
+  constructor(store: SoundStore, alerts: AlertService, listener: PipelineListener, settings: AppSettings) {
     this.store = store;
     this.alerts = alerts;
     this.listener = listener;
+    this.settings = settings;
   }
 
   currentState(): ListenState {
@@ -75,7 +82,8 @@ export class AudioService {
           hilog.warn(LOG_DOMAIN, TAG, 'Stored sound %{public}s could not be loaded', t.label);
         }
       }
-      this.pipeline = new SoundPipeline(this.store.catalog(), engine, this.alerts, this.store, this.listener);
+      this.pipeline = new SoundPipeline(this.store.catalog(), engine, this.alerts, this.store, this.listener,
+        this.settings);
       if (DEBUG_CAPTURE_AUDIO) {
         this.debugFd = fs.openSync(context.filesDir + '/debug_capture.pcm',
           fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC).fd;
@@ -127,6 +135,9 @@ export class AudioService {
   // For the app lifecycle: end a listening session, and cancel a start that is still waiting on a permission
   // dialog or the capturer, so the microphone never ends up running in the background.
   async onBackground(): Promise<void> {
+    if (this.keepInBackground()) {
+      return; // the user chose to keep listening in the background
+    }
     if (this.state === 'starting' || this.state === 'listening') {
       await this.stop();
     }
@@ -251,6 +262,7 @@ export class AudioService {
       const result = engine.process(buffer);
       this.onLevel(result.levelDb);
       this.onSpectrum(result.bands);
+      this.onPcm(buffer);
       if (this.takeResolve !== undefined) {
         this.collectTake(buffer); // teaching: no events are analysed meanwhile
         return;

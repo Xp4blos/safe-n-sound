@@ -1,3 +1,4 @@
+import { SoundClasses } from '../model/SoundClasses';
 import { SoundRecord } from '../model/SoundModels';
 import { EnvelopeMini } from './EnvelopeMini';
 
@@ -12,6 +13,9 @@ function clockTime(ms: number): string {
 
 // Letter shown in the avatar: the first letter of the name, "?" for an unnamed sound, "…" while it is learned.
 export function avatarLetter(record: SoundRecord): string {
+  if (SoundClasses.isBuiltInLabel(record.label)) {
+    return '';
+  }
   if (record.name !== '') {
     return record.name.charAt(0).toUpperCase();
   }
@@ -28,10 +32,16 @@ export struct HistoryTab {
   row(record: SoundRecord) {
     Row({ space: 14 }) {
       Column() {
-        Text(avatarLetter(record))
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(record.name !== '' ? $r('app.color.on_accent') : $r('app.color.accent'))
+        if (SoundClasses.isBuiltInLabel(record.label)) {
+          SymbolGlyph($r('sys.symbol.bell'))
+            .fontSize(24)
+            .fontColor([$r('app.color.on_accent')])
+        } else {
+          Text(avatarLetter(record))
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(record.name !== '' ? $r('app.color.on_accent') : $r('app.color.accent'))
+        }
       }
       .width(48)
       .height(48)
@@ -55,7 +65,9 @@ export struct HistoryTab {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      EnvelopeMini({ envelope: record.profile.envelope })
+      if (!SoundClasses.isBuiltInLabel(record.label)) {
+        EnvelopeMini({ envelope: record.profile.envelope })
+      }
     }
     .width('100%')
     .padding(16)
@@ -63,7 +75,9 @@ export struct HistoryTab {
     .backgroundColor($r('app.color.surface'))
     .border({ width: 1, color: $r('app.color.border') })
     .onClick((): void => {
-      this.onOpen(record.id);
+      if (!SoundClasses.isBuiltInLabel(record.label)) {
+        this.onOpen(record.id);
+      }
     })
   }
 

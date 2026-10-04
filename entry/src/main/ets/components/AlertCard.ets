@@ -14,6 +14,7 @@ function clockTime(ms: number): string {
 @Component
 export struct AlertCard {
   @Prop record: SoundRecord | undefined = undefined;
+  @Prop heading: string = ''; // replaces "<name> detected" (keyword cards)
 
   private recentCount(r: SoundRecord): number {
     return r.recentMs.filter((t: number): boolean => r.lastSeenMs - t <= 30000).length;
@@ -33,7 +34,8 @@ export struct AlertCard {
       .backgroundColor('#33FFFFFF')
 
       Column({ space: 4 }) {
-        Text($r('app.string.alert_card_title', this.record === undefined ? '' : this.record.name))
+        Text(this.heading !== '' ? this.heading :
+          $r('app.string.alert_card_title', this.record === undefined ? '' : this.record.name))
           .fontSize(22).fontWeight(FontWeight.Bold).fontColor($r('app.color.on_accent'))
         Text($r('app.string.at_time', this.record === undefined ? '' : clockTime(this.record.lastSeenMs)))
           .fontSize(15).fontColor($r('app.color.on_accent')).opacity(0.9)

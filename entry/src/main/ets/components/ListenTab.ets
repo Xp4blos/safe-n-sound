@@ -24,6 +24,7 @@ export struct ListenTab {
   @Prop lastSound: SoundRecord | undefined = undefined;
   @Prop lastSoundIsNew: boolean = false;
   @Prop alertRecord: SoundRecord | undefined = undefined;
+  @Prop alertHeading: string = '';
   onToggle: () => void = (): void => {};
   onTeach: () => void = (): void => {};
   onDismissAlert: () => void = (): void => {};
@@ -201,7 +202,7 @@ export struct ListenTab {
     // push the buttons down. Tap it to dismiss.
     if (this.alertRecord !== undefined) {
       Column() {
-        AlertCard({ record: this.alertRecord })
+        AlertCard({ record: this.alertRecord, heading: this.alertHeading })
       }
       .width('100%')
       .padding({ left: 18, right: 18, top: 78 })

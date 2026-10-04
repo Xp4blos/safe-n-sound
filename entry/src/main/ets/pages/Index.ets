@@ -1,16 +1,23 @@
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { CaptionsTab } from '../components/CaptionsTab';
 import { HistoryTab } from '../components/HistoryTab';
 import { ListenTab } from '../components/ListenTab';
 import { MySoundsTab } from '../components/MySoundsTab';
 import { PromptDialog } from '../components/PromptDialog';
+import { SettingsTab } from '../components/SettingsTab';
 import { SoundDetailDialog } from '../components/SoundDetailDialog';
 import { TakeStatus, TeachDialog } from '../components/TeachDialog';
-import { SoundRecord } from '../model/SoundModels';
+import { AppSettings } from '../model/AppSettings';
+import { SoundClass, SoundClasses } from '../model/SoundClasses';
+import { SoundProfile, SoundRecord } from '../model/SoundModels';
+import { KeywordRule, SpeechCaption } from '../model/SpeechModels';
 import { SpectrumHistory } from '../model/SpectrumHistory';
 import { AlertService } from '../services/AlertService';
 import { AudioService, ListenState } from '../services/AudioService';
 import { PipelineListener } from '../services/SoundPipeline';
+import { SettingsStore } from '../services/SettingsStore';
+import { SpeechService } from '../services/SpeechService';
 import { ServiceHub } from '../services/ServiceHub';
 import { SoundStore } from '../services/SoundStore';
 
@@ -34,6 +41,7 @@ class UiBridge implements PipelineListener {
   heard: (record: SoundRecord, isNew: boolean) => void = (record: SoundRecord, isNew: boolean): void => {};
   alert: (record: SoundRecord, timeMs: number) => void = (record: SoundRecord, timeMs: number): void => {};
   prompt: (record: SoundRecord) => void = (record: SoundRecord): void => {};
+  classAlert: (record: SoundRecord, timeMs: number) => void = (record: SoundRecord, timeMs: number): void => {};
   detection: (timeMs: number) => void = (timeMs: number): void => {};
   changed: () => void = (): void => {};
 
@@ -47,6 +55,10 @@ class UiBridge implements PipelineListener {
 
   onPrompt(record: SoundRecord): void {
     this.prompt(record);
+  }
+
+  onClassAlert(record: SoundRecord, timeMs: number): void {
+    this.classAlert(record, timeMs);
   }
 
   onDetection(timeMs: number): void {
@@ -71,12 +83,22 @@ struct Index {
   @State lastSoundIsNew: boolean = false;
   @State alertRecord: SoundRecord | undefined = undefined;
   @State sounds: SoundRecord[] = [];
+  @State alertHeading: string = '';
+  @State captions: SpeechCaption[] = [];
+  @State liveCaption: SpeechCaption | undefined = undefined;
+  @State lastKeyword: string = '';
+  @State rules: KeywordRule[] = [];
+  @State speechActive: boolean = false;
+  @State speechError: string = '';
+  @State settingKeys: string[] = [];
   private spectrum: SpectrumHistory = new SpectrumHistory();
   private lastUiMs: number = 0;
   private alertToken: number = 0;
   private alerts: AlertService = new AlertService();
   private store: SoundStore | undefined = undefined;
   private audioService: AudioService | undefined = undefined;
+  private settingsStore: SettingsStore | undefined = undefined;
+  private speech: SpeechService | undefined = undefined;
   private takeBuffers: ArrayBuffer[] = [];
   private teachOpen: boolean = false;
   private pendingPromptId: number = -1; // a naming prompt that came up while the Teach dialog was open
@@ -93,6 +115,21 @@ struct Index {
     const store = await SoundStore.open(this.context());
     this.store = store;
     this.refreshSounds();
+    const settingsStore = await SettingsStore.open(this.context());
+    this.settingsStore = settingsStore;
+    const settings = settingsStore.settings;
+    this.refreshSettingKeys();
+    const speech = new SpeechService(settingsStore, this.alerts);
+    this.speech = speech;
+    speech.onChanged = (): void => {
+      this.syncSpeech();
+    };
+    speech.onKeyword = (label: string, text: string, timeMs: number): void => {
+      hilog.info(LOG_DOMAIN, TAG, 'KEYWORD %{public}s', label);
+      this.showKeywordCard(label, timeMs);
+    };
+    speech.ensureReady();
+    this.syncSpeech();
 
     const bridge = new UiBridge();
     bridge.heard = (record: SoundRecord, isNew: boolean): void => {
@@ -102,13 +139,11 @@ struct Index {
     };
     bridge.alert = (record: SoundRecord, timeMs: number): void => {
       hilog.info(LOG_DOMAIN, TAG, 'ALERT card id=%{public}d name=%{public}s', record.id, record.name);
-      this.alertRecord = copyRecord(record);
-      const token = ++this.alertToken;
-      setTimeout((): void => {
-        if (token === this.alertToken) {
-          this.alertRecord = undefined;
-        }
-      }, ALERT_CARD_MS);
+      this.showAlertCard(record, '');
+    };
+    bridge.classAlert = (record: SoundRecord, timeMs: number): void => {
+      hilog.info(LOG_DOMAIN, TAG, 'ALERT class=%{public}s', record.label);
+      this.showAlertCard(record, '');
     };
     bridge.prompt = (record: SoundRecord): void => {
       this.openPrompt(record);
@@ -120,7 +155,11 @@ struct Index {
       this.refreshSounds();
     };
 
-    const service = new AudioService(store, this.alerts, bridge);
+    const service = new AudioService(store, this.alerts, bridge, settings);
+    service.keepInBackground = (): boolean => settings.keepListeningInBackground && this.alerts.isBackgroundActive();
+    service.onPcm = (pcm: ArrayBuffer): void => {
+      speech.feed(pcm);
+    };
     service.onSpectrum = (bands: number[]): void => {
       const now = Date.now();
       this.spectrum.push(bands, now);
@@ -133,6 +172,7 @@ struct Index {
     };
     service.onState = (state: ListenState): void => {
       this.listenState = state;
+      this.applyListeningState(state);
       if (state !== 'listening') {
         this.spectrum.reset();
         this.columns = this.spectrum.columns();
@@ -142,6 +182,137 @@ struct Index {
     };
     this.audioService = service;
     ServiceHub.audio = service;
+    if (settings.autoStart) {
+      this.toggleListening();
+    }
+  }
+
+  // Card on the Listen tab for a sound that just alerted; it stays for a minute or until dismissed.
+  private showAlertCard(record: SoundRecord, heading: string): void {
+    this.alertHeading = heading;
+    this.alertRecord = copyRecord(record);
+    const token = ++this.alertToken;
+    setTimeout((): void => {
+      if (token === this.alertToken) {
+        this.alertRecord = undefined;
+      }
+    }, ALERT_CARD_MS);
+  }
+
+  private showKeywordCard(label: string, timeMs: number): void {
+    const profile: SoundProfile = {
+      dominantHz: 0, durationSec: 0, beepCount: 0, beepsPerSec: 0, repetition: 0, modulation: 0,
+      envelope: [0, 0, 0, 0, 0, 0, 0, 0]
+    };
+    const record: SoundRecord = {
+      id: -1, label: 'keyword', name: label, alertsEnabled: true, timesHeard: 1, firstSeenMs: timeMs, lastSeenMs: timeMs,
+      lastAlertMs: timeMs, lastPromptMs: 0, promptNever: false, recentMs: [timeMs], profile: profile, template: ''
+    };
+    this.showAlertCard(record, 'Heard "' + label + '"');
+  }
+
+  // Background task and speech recogniser follow the microphone.
+  private applyListeningState(state: ListenState): void {
+    const settings = this.settingsStore?.settings;
+    if (settings === undefined) {
+      return;
+    }
+    if (state === 'listening') {
+      if (settings.keepListeningInBackground) {
+        this.alerts.startBackground(this.context());
+      }
+      if (settings.speechEnabled) {
+        this.speech?.start();
+      }
+    } else if (state === 'idle' || state === 'error' || state === 'permission_denied') {
+      this.speech?.stop();
+      this.alerts.stopBackground(this.context());
+    }
+  }
+
+  private syncSpeech(): void {
+    const speech = this.speech;
+    if (speech === undefined) {
+      return;
+    }
+    this.captions = speech.captions().slice();
+    this.liveCaption = speech.live();
+    this.lastKeyword = speech.lastAlert();
+    this.rules = speech.rules.slice();
+    this.speechActive = speech.active;
+    this.speechError = speech.error;
+  }
+
+  private refreshSettingKeys(): void {
+    const settings = this.settingsStore?.settings;
+    if (settings === undefined) {
+      return;
+    }
+    const keys: string[] = [];
+    if (settings.vibrate) {
+      keys.push('vibrate');
+    }
+    if (settings.notify) {
+      keys.push('notify');
+    }
+    if (settings.keepListeningInBackground) {
+      keys.push('background');
+    }
+    if (settings.autoStart) {
+      keys.push('autoStart');
+    }
+    if (settings.speechEnabled) {
+      keys.push('speech');
+    }
+    if (settings.speechOnPartial) {
+      keys.push('partial');
+    }
+    for (const cls of SoundClasses.all()) {
+      if (settings.isClassOn(cls.key)) {
+        keys.push('class:' + cls.key);
+      }
+    }
+    this.settingKeys = keys;
+  }
+
+  private async changeSetting(key: string, on: boolean): Promise<void> {
+    const store = this.settingsStore;
+    if (store === undefined) {
+      return;
+    }
+    const settings: AppSettings = store.settings;
+    if (key.startsWith('class:')) {
+      settings.setClass(key.substring(SoundClasses.PREFIX.length), on);
+    } else if (key === 'vibrate') {
+      settings.vibrate = on;
+    } else if (key === 'notify') {
+      settings.notify = on;
+    } else if (key === 'background') {
+      settings.keepListeningInBackground = on;
+      if (this.listenState === 'listening') {
+        if (on) {
+          this.alerts.startBackground(this.context());
+        } else {
+          this.alerts.stopBackground(this.context());
+        }
+      }
+    } else if (key === 'autoStart') {
+      settings.autoStart = on;
+    } else if (key === 'speech') {
+      settings.speechEnabled = on;
+      if (this.listenState === 'listening') {
+        if (on) {
+          this.speech?.start();
+        } else {
+          this.speech?.stop();
+        }
+      }
+    } else if (key === 'partial') {
+      settings.speechOnPartial = on;
+      this.speech?.rebuild();
+    }
+    this.refreshSettingKeys();
+    await store.saveSettings();
   }
 
   // Newest first; copies so the UI sees a changed array even when records were updated in place.
@@ -155,7 +326,7 @@ struct Index {
   }
 
   private namedSounds(): SoundRecord[] {
-    return this.sounds.filter((r: SoundRecord): boolean => r.name !== '');
+    return this.sounds.filter((r: SoundRecord): boolean => r.name !== '' && !SoundClasses.isBuiltInLabel(r.label));
   }
 
   // ---- listening --------------------------------------------------------------------------------
@@ -406,6 +577,7 @@ struct Index {
           lastSound: this.lastSound,
           lastSoundIsNew: this.lastSoundIsNew,
           alertRecord: this.alertRecord,
+          alertHeading: this.alertHeading,
           onToggle: (): void => {
             this.toggleListening();
           },
@@ -430,6 +602,32 @@ struct Index {
       .tabBar(this.tabItem($r('app.string.tab_history'), $r('sys.symbol.clock'), 1))
 
       TabContent() {
+        CaptionsTab({
+          captions: this.captions,
+          live: this.liveCaption,
+          lastAlert: this.lastKeyword,
+          rules: this.rules,
+          active: this.speechActive,
+          listening: this.listenState === 'listening',
+          speechOn: this.settingKeys.includes('speech'),
+          error: this.speechError,
+          onSimulate: (text: string): void => {
+            this.speech?.simulate(text);
+          },
+          onClear: (): void => {
+            this.speech?.clear();
+          },
+          onAddRule: (phrase: string, preset: string): void => {
+            this.speech?.addRule(phrase, preset);
+          },
+          onRemoveRule: (phrase: string): void => {
+            this.speech?.removeRule(phrase);
+          }
+        })
+      }
+      .tabBar(this.tabItem($r('app.string.tab_captions'), $r('sys.symbol.ellipsis_message'), 2))
+
+      TabContent() {
         MySoundsTab({
           sounds: this.namedSounds(),
           onOpen: (id: number): void => {
@@ -440,7 +638,17 @@ struct Index {
           }
         })
       }
-      .tabBar(this.tabItem($r('app.string.tab_mysounds'), $r('sys.symbol.bell'), 2))
+      .tabBar(this.tabItem($r('app.string.tab_mysounds'), $r('sys.symbol.bell'), 3))
+
+      TabContent() {
+        SettingsTab({
+          onKeys: this.settingKeys,
+          onToggle: (key: string, on: boolean): void => {
+            this.changeSetting(key, on);
+          }
+        })
+      }
+      .tabBar(this.tabItem($r('app.string.tab_settings'), $r('sys.symbol.gearshape'), 4))
     }
     .width('100%')
     .height('100%')
