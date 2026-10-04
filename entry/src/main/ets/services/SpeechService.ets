@@ -160,6 +160,7 @@ export class SpeechService implements RecognizerSink {
 
   // RecognizerSink
   onText(text: string, isFinal: boolean): void {
+    this.error = ''; // a recogniser hiccup between two sessions is over once text arrives again
     const now = Date.now();
     this.board?.onResult(text, isFinal, now, (now - this.t0) / 1000);
     this.onChanged();
