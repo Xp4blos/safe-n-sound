@@ -36,6 +36,11 @@ interface SoundWindow {
   toSec: number;
 }
 
+interface HeldLoud {
+  event: EngineEvent;
+  dueMs: number;
+}
+
 interface HeldAlarm {
   event: EngineEvent;
   arrivedMs: number;
@@ -54,6 +59,8 @@ export class SoundPipeline {
   static readonly MAX_ATTEMPTS: number = 4;
   static readonly BURST_MS: number = 6000; // alarms this close to a new sound belong to the same burst
   static readonly EXPLAIN_MARGIN_SEC: number = 0.6;
+  // The engine reports the first ~2 s of a siren as a loud sound; a loud sound is held until it is clear it is not one.
+  static readonly LOUD_HOLD_MS: number = 3000;
 
   private catalog: SoundCatalog;
   private engine: EnginePort;
@@ -62,6 +69,7 @@ export class SoundPipeline {
   private listener: PipelineListener;
   private settings: AppSettings;
   private held: HeldAlarm[] = [];
+  private heldLoud: HeldLoud[] = [];
   private explained: SoundWindow[] = []; // windows of recognised sounds, for beeps that arrive after the match
   private lastNewSoundMs: number = -1e15;
 
@@ -96,6 +104,7 @@ export class SoundPipeline {
 
   // Call regularly (every audio chunk): resolves held alarms whose time has come.
   tick(nowMs: number): void {
+    this.releaseLoud(nowMs);
     if (this.held.length === 0) {
       return;
     }
@@ -161,10 +170,38 @@ export class SoundPipeline {
     if (cls.selfVibrationSensitive && this.alerts.isVibrating(nowMs)) {
       return; // the phone's own vibration is not a knock or a loud sound
     }
+    if (cls.key === 'loud_sound') {
+      const held: HeldLoud = { event: ev, dueMs: nowMs + SoundPipeline.LOUD_HOLD_MS };
+      this.heldLoud.push(held);
+      return;
+    }
     this.listener.onDetection(nowMs);
     if (cls.explainBackSec > 0) {
       this.explain(ev, cls.explainBackSec); // a siren, scream or cry is also heard as alarm tones at first
+      const from = ev.timeSec - cls.explainBackSec - SoundPipeline.EXPLAIN_MARGIN_SEC;
+      this.heldLoud = this.heldLoud.filter((h: HeldLoud): boolean => h.event.timeSec < from);
     }
+    this.report(cls, nowMs);
+  }
+
+  private releaseLoud(nowMs: number): void {
+    if (this.heldLoud.length === 0) {
+      return;
+    }
+    const due = this.heldLoud.filter((h: HeldLoud): boolean => h.dueMs <= nowMs);
+    if (due.length === 0) {
+      return;
+    }
+    this.heldLoud = this.heldLoud.filter((h: HeldLoud): boolean => h.dueMs > nowMs);
+    const cls = SoundClasses.forEvent('loud_sound');
+    if (cls !== undefined && this.settings.isClassOn(cls.key)) {
+      this.listener.onDetection(nowMs);
+      this.report(cls, nowMs); // one loud sound per release; several within the hold count as one
+    }
+  }
+
+  // History record, vibration, notification and card for a built-in class.
+  private report(cls: SoundClass, nowMs: number): void {
     this.catalog.ensureBuiltIn(cls.label, cls.title, nowMs);
     const occurrence = this.catalog.registerOccurrence(cls.label, nowMs);
     if (occurrence === undefined) {

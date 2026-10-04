@@ -257,6 +257,7 @@ export default function soundPipelineTest() {
       const rig = new Rig();
       rig.alerts.vibrating = true;
       rig.pipeline.handle([builtIn('knock', 10), builtIn('loud_sound', 11), builtIn('siren', 12)], T0);
+      rig.pipeline.tick(T0 + 10000);
       expect(rig.alerts.classPatterns.join(',')).assertEqual('siren');
       expect(rig.catalog.records().length).assertEqual(1);
     });
@@ -276,6 +277,26 @@ export default function soundPipelineTest() {
       expect(rig.alerts.unknownPulses).assertEqual(0);
       expect(rig.listener.classAlerts.length).assertEqual(1); // the on-screen card still shows
       expect(rig.listener.alerts.length).assertEqual(1);
+    });
+
+    it('a_loud_sound_that_turns_out_to_be_a_siren_is_not_reported_as_loud', 0, () => {
+      // The engine reports the onset of a siren as a loud sound first and confirms the siren about 2 s later.
+      const rig = new Rig();
+      rig.pipeline.handle([builtIn('loud_sound', 10)], T0);
+      rig.pipeline.handle([builtIn('siren', 12.1)], T0 + 2100);
+      rig.pipeline.tick(T0 + 10000);
+      expect(rig.alerts.classPatterns.join(',')).assertEqual('siren');
+      expect(rig.catalog.records().length).assertEqual(1);
+      expect(rig.catalog.records()[0].name).assertEqual('Siren');
+    });
+
+    it('a_loud_sound_on_its_own_is_reported_after_the_short_hold', 0, () => {
+      const rig = new Rig();
+      rig.pipeline.handle([builtIn('loud_sound', 10)], T0);
+      expect(rig.alerts.classPatterns.length).assertEqual(0); // still held
+      rig.pipeline.tick(T0 + 3500);
+      expect(rig.alerts.classPatterns.join(',')).assertEqual('loud_sound');
+      expect(rig.catalog.records()[0].timesHeard).assertEqual(1);
     });
 
     it('a_siren_explains_the_alarm_events_in_its_window_so_no_unknown_sound_is_created', 0, () => {
