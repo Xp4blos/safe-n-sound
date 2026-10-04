@@ -1,4 +1,6 @@
+import { AppSettings } from '../model/AppSettings';
 import { SoundCatalog } from '../model/SoundCatalog';
+import { SoundClass, SoundClasses } from '../model/SoundClasses';
 import { EngineEvent, LearnOutcome, SoundRecord } from '../model/SoundModels';
 
 // Narrow ports so the pipeline can be tested without the native library, vibrator, storage or UI.
@@ -11,6 +13,9 @@ export interface AlertPort {
   vibrateNamed(): void; // distinct long pattern
   notifyNamed(name: string, timeMs: number): void;
   notifyPrompt(): void; // "I've heard this sound before. Do you want to name it?"
+  vibrateClass(cls: SoundClass): void; // the class's own pattern
+  notifyClass(cls: SoundClass, timeMs: number): void;
+  isVibrating(nowMs: number): boolean; // the phone itself is (or just was) vibrating
 }
 
 export interface SavePort {
@@ -21,6 +26,7 @@ export interface PipelineListener {
   onSoundHeard(record: SoundRecord, isNew: boolean): void;
   onAlert(record: SoundRecord, timeMs: number): void; // a named sound: show the alert card
   onPrompt(record: SoundRecord): void; // an unnamed sound again: show the "I know this sound" dialog
+  onClassAlert(record: SoundRecord, timeMs: number): void; // a built-in class (siren, ...): show the alert card
   onDetection(timeMs: number): void; // highlight the moment in the live view
   onChanged(): void; // the list of sounds changed
 }
@@ -54,16 +60,19 @@ export class SoundPipeline {
   private alerts: AlertPort;
   private saver: SavePort;
   private listener: PipelineListener;
+  private settings: AppSettings;
   private held: HeldAlarm[] = [];
   private explained: SoundWindow[] = []; // windows of recognised sounds, for beeps that arrive after the match
   private lastNewSoundMs: number = -1e15;
 
-  constructor(catalog: SoundCatalog, engine: EnginePort, alerts: AlertPort, saver: SavePort, listener: PipelineListener) {
+  constructor(catalog: SoundCatalog, engine: EnginePort, alerts: AlertPort, saver: SavePort, listener: PipelineListener,
+    settings: AppSettings = new AppSettings()) {
     this.catalog = catalog;
     this.engine = engine;
     this.alerts = alerts;
     this.saver = saver;
     this.listener = listener;
+    this.settings = settings;
   }
 
   // Feed the events of one engine chunk, then release anything that has waited long enough.
@@ -71,6 +80,8 @@ export class SoundPipeline {
     for (const ev of events) {
       if (ev.type === 'custom') {
         this.onCustom(ev, nowMs);
+      } else if (SoundClasses.forEvent(ev.type) !== undefined) {
+        this.onBuiltIn(ev, nowMs);
       } else if (ev.type === 'alarm') {
         this.listener.onDetection(nowMs);
         if (this.isExplained(ev.timeSec)) {
@@ -100,15 +111,7 @@ export class SoundPipeline {
 
   private onCustom(ev: EngineEvent, nowMs: number): void {
     this.listener.onDetection(nowMs);
-    // The stored sound explains the alarm events inside its window.
-    const from = ev.startSec - SoundPipeline.EXPLAIN_MARGIN_SEC;
-    const to = ev.timeSec + SoundPipeline.EXPLAIN_MARGIN_SEC;
-    this.held = this.held.filter((h: HeldAlarm): boolean => h.event.timeSec < from || h.event.timeSec > to);
-    const matched: SoundWindow = { fromSec: from, toSec: to };
-    this.explained.push(matched);
-    if (this.explained.length > 8) {
-      this.explained.shift();
-    }
+    this.explain(ev);
 
     const occurrence = this.catalog.registerOccurrence(ev.label, nowMs);
     if (occurrence === undefined) {
@@ -116,17 +119,67 @@ export class SoundPipeline {
     }
     const record = occurrence.record;
     if (occurrence.shouldAlert) {
-      this.alerts.vibrateNamed();
-      this.alerts.notifyNamed(record.name, nowMs);
+      if (this.settings.vibrate) {
+        this.alerts.vibrateNamed();
+      }
+      if (this.settings.notify) {
+        this.alerts.notifyNamed(record.name, nowMs);
+      }
       this.listener.onAlert(record, nowMs);
-    } else if (record.name === '') {
+    } else if (record.name === '' && this.settings.vibrate) {
       this.alerts.vibrateUnknown();
     }
     if (occurrence.shouldPrompt) {
-      this.alerts.notifyPrompt();
+      if (this.settings.notify) {
+        this.alerts.notifyPrompt();
+      }
       this.listener.onPrompt(record);
     }
     this.listener.onSoundHeard(record, false);
+    this.saver.save();
+  }
+
+  // A recognised sound explains the alarm events inside its window (also those that arrive just after the match).
+  private explain(ev: EngineEvent, backSec: number = 0): void {
+    const start = backSec > 0 ? ev.timeSec - backSec : ev.startSec;
+    const from = start - SoundPipeline.EXPLAIN_MARGIN_SEC;
+    const to = ev.timeSec + SoundPipeline.EXPLAIN_MARGIN_SEC;
+    this.held = this.held.filter((h: HeldAlarm): boolean => h.event.timeSec < from || h.event.timeSec > to);
+    const matched: SoundWindow = { fromSec: from, toSec: to };
+    this.explained.push(matched);
+    if (this.explained.length > 8) {
+      this.explained.shift();
+    }
+  }
+
+  // A built-in class (siren, scream, baby crying, chirp, knock, loud sound).
+  private onBuiltIn(ev: EngineEvent, nowMs: number): void {
+    const cls = SoundClasses.forEvent(ev.type);
+    if (cls === undefined || !this.settings.isClassOn(cls.key)) {
+      return;
+    }
+    if (cls.selfVibrationSensitive && this.alerts.isVibrating(nowMs)) {
+      return; // the phone's own vibration is not a knock or a loud sound
+    }
+    this.listener.onDetection(nowMs);
+    if (cls.explainBackSec > 0) {
+      this.explain(ev, cls.explainBackSec); // a siren, scream or cry is also heard as alarm tones at first
+    }
+    this.catalog.ensureBuiltIn(cls.label, cls.title, nowMs);
+    const occurrence = this.catalog.registerOccurrence(cls.label, nowMs);
+    if (occurrence === undefined) {
+      return;
+    }
+    if (occurrence.shouldAlert) {
+      if (this.settings.vibrate) {
+        this.alerts.vibrateClass(cls);
+      }
+      if (this.settings.notify) {
+        this.alerts.notifyClass(cls, nowMs);
+      }
+      this.listener.onClassAlert(occurrence.record, nowMs);
+    }
+    this.listener.onSoundHeard(occurrence.record, false);
     this.saver.save();
   }
 
@@ -142,7 +195,9 @@ export class SoundPipeline {
       const record = this.catalog.createPending(h.arrivedMs);
       h.label = record.label;
       this.lastNewSoundMs = nowMs;
-      this.alerts.vibrateUnknown();
+      if (this.settings.vibrate) {
+        this.alerts.vibrateUnknown();
+      }
       this.listener.onSoundHeard(record, true);
       this.listener.onChanged();
     }

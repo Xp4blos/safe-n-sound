@@ -1,5 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium';
+import { AppSettings } from '../main/ets/model/AppSettings';
 import { SoundCatalog } from '../main/ets/model/SoundCatalog';
+import { SoundClass } from '../main/ets/model/SoundClasses';
 import { EngineEvent, LearnOutcome, SoundProfile, SoundRecord } from '../main/ets/model/SoundModels';
 import { AlertPort, EnginePort, PipelineListener, SavePort, SoundPipeline } from '../main/ets/services/SoundPipeline';
 
@@ -39,6 +41,9 @@ class FakeAlerts implements AlertPort {
   namedPatterns: number = 0;
   namedNotes: string[] = [];
   prompts: number = 0;
+  classPatterns: string[] = [];
+  classNotes: string[] = [];
+  vibrating: boolean = false;
 
   vibrateUnknown(): void {
     this.unknownPulses++;
@@ -55,6 +60,18 @@ class FakeAlerts implements AlertPort {
   notifyPrompt(): void {
     this.prompts++;
   }
+
+  vibrateClass(cls: SoundClass): void {
+    this.classPatterns.push(cls.key);
+  }
+
+  notifyClass(cls: SoundClass, timeMs: number): void {
+    this.classNotes.push(cls.title + '@' + timeMs);
+  }
+
+  isVibrating(nowMs: number): boolean {
+    return this.vibrating;
+  }
 }
 
 class FakeSaver implements SavePort {
@@ -69,6 +86,7 @@ class FakeListener implements PipelineListener {
   heard: string[] = [];
   alerts: string[] = [];
   prompts: string[] = [];
+  classAlerts: string[] = [];
   detections: number = 0;
   changes: number = 0;
 
@@ -82,6 +100,10 @@ class FakeListener implements PipelineListener {
 
   onPrompt(record: SoundRecord): void {
     this.prompts.push(record.label);
+  }
+
+  onClassAlert(record: SoundRecord, timeMs: number): void {
+    this.classAlerts.push(record.name + '@' + timeMs);
   }
 
   onDetection(timeMs: number): void {
@@ -103,13 +125,20 @@ function custom(label: string, startSec: number, timeSec: number): EngineEvent {
   return e;
 }
 
+function builtIn(type: string, timeSec: number): EngineEvent {
+  const e: EngineEvent = { type: type, timeSec: timeSec, startSec: timeSec, confidence: 1, freqHz: 0, levelDb: -20, label: '' };
+  return e;
+}
+
 class Rig {
   engine: FakeEngine = new FakeEngine();
   alerts: FakeAlerts = new FakeAlerts();
   saver: FakeSaver = new FakeSaver();
   listener: FakeListener = new FakeListener();
   catalog: SoundCatalog = new SoundCatalog([]);
-  pipeline: SoundPipeline = new SoundPipeline(this.catalog, this.engine, this.alerts, this.saver, this.listener);
+  settings: AppSettings = new AppSettings();
+  pipeline: SoundPipeline =
+    new SoundPipeline(this.catalog, this.engine, this.alerts, this.saver, this.listener, this.settings);
 
   // A previously learned sound 'snd-1' (optionally named).
   withKnownSound(name: string): Rig {
@@ -190,6 +219,74 @@ export default function soundPipelineTest() {
       rig.pipeline.handle([alarm(40)], T0 + 10850);
       rig.pipeline.tick(T0 + 20000);
       expect(rig.catalog.records().length).assertEqual(2);
+    });
+
+    // ---- built-in classes ----------------------------------------------------------------------------
+
+    it('a_siren_is_recorded_in_history_vibrates_notifies_and_shows_a_card', 0, () => {
+      const rig = new Rig();
+      rig.pipeline.handle([builtIn('siren', 10)], T0);
+      expect(rig.catalog.records().length).assertEqual(1);
+      expect(rig.catalog.records()[0].name).assertEqual('Siren');
+      expect(rig.catalog.records()[0].timesHeard).assertEqual(1);
+      expect(rig.alerts.classPatterns.join(',')).assertEqual('siren');
+      expect(rig.alerts.classNotes.join(',')).assertEqual('Siren@' + T0);
+      expect(rig.listener.classAlerts.join(',')).assertEqual('Siren@' + T0);
+      expect(rig.saver.saves > 0).assertTrue();
+    });
+
+    it('a_class_that_is_switched_off_is_ignored_completely', 0, () => {
+      const rig = new Rig();
+      rig.settings.setClass('cry', false);
+      rig.pipeline.handle([builtIn('cry', 10)], T0);
+      expect(rig.catalog.records().length).assertEqual(0);
+      expect(rig.alerts.classPatterns.length).assertEqual(0);
+      expect(rig.listener.classAlerts.length).assertEqual(0);
+    });
+
+    it('a_repeated_class_alerts_once_per_cooldown_but_keeps_counting', 0, () => {
+      const rig = new Rig();
+      rig.pipeline.handle([builtIn('scream', 10)], T0);
+      rig.pipeline.handle([builtIn('scream', 14)], T0 + 4000);
+      rig.pipeline.handle([builtIn('scream', 40)], T0 + 30000);
+      expect(rig.alerts.classPatterns.length).assertEqual(2);
+      expect(rig.catalog.records()[0].timesHeard).assertEqual(3);
+    });
+
+    it('knocks_and_loud_sounds_are_ignored_while_the_phone_vibrates_but_sirens_are_not', 0, () => {
+      const rig = new Rig();
+      rig.alerts.vibrating = true;
+      rig.pipeline.handle([builtIn('knock', 10), builtIn('loud_sound', 11), builtIn('siren', 12)], T0);
+      expect(rig.alerts.classPatterns.join(',')).assertEqual('siren');
+      expect(rig.catalog.records().length).assertEqual(1);
+    });
+
+    it('the_vibrate_and_notify_switches_apply_to_classes_named_and_unknown_sounds', 0, () => {
+      const rig = new Rig().withKnownSound('Doorbell');
+      rig.settings.vibrate = false;
+      rig.settings.notify = false;
+      rig.pipeline.handle([builtIn('siren', 10)], T0);
+      rig.pipeline.handle([custom('snd-1', 20, 22)], T0 + 20000);
+      rig.pipeline.handle([alarm(60)], T0 + 60000);
+      rig.pipeline.tick(T0 + 70000);
+      expect(rig.alerts.classPatterns.length).assertEqual(0);
+      expect(rig.alerts.classNotes.length).assertEqual(0);
+      expect(rig.alerts.namedPatterns).assertEqual(0);
+      expect(rig.alerts.namedNotes.length).assertEqual(0);
+      expect(rig.alerts.unknownPulses).assertEqual(0);
+      expect(rig.listener.classAlerts.length).assertEqual(1); // the on-screen card still shows
+      expect(rig.listener.alerts.length).assertEqual(1);
+    });
+
+    it('a_siren_explains_the_alarm_events_in_its_window_so_no_unknown_sound_is_created', 0, () => {
+      const rig = new Rig();
+      rig.pipeline.handle([alarm(10)], T0);
+      rig.pipeline.handle([alarm(10.8)], T0 + 800);
+      rig.pipeline.handle([builtIn('siren', 12.2)], T0 + 2200);
+      rig.pipeline.handle([alarm(12.6)], T0 + 2600); // a late beep of the same siren
+      rig.pipeline.tick(T0 + 20000);
+      expect(rig.catalog.records().length).assertEqual(1); // only the Siren record
+      expect(rig.engine.calls.length).assertEqual(0);
     });
 
     it('the_second_occurrence_of_an_unnamed_sound_asks_to_name_it', 0, () => {

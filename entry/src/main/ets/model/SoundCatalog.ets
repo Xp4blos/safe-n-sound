@@ -1,3 +1,4 @@
+import { SoundClasses } from './SoundClasses';
 import { SoundProfile, SoundRecord } from './SoundModels';
 
 export interface Occurrence {
@@ -131,6 +132,11 @@ export class SoundCatalog {
     return this.items;
   }
 
+  // The sounds that belong in My sounds: everything except the built-in classes (siren, scream, ...).
+  userSounds(): SoundRecord[] {
+    return this.items.filter((r: SoundRecord): boolean => !SoundClasses.isBuiltInLabel(r.label));
+  }
+
   find(id: number): SoundRecord | undefined {
     return this.items.find((r: SoundRecord): boolean => r.id === id);
   }
@@ -167,6 +173,22 @@ export class SoundCatalog {
     const id = this.nextId();
     this.reservedId = id;
     return 'snd-' + id;
+  }
+
+  // The history record of a built-in class, created when the class is first heard. It is named from the start and has
+  // no template: the engine detects these classes by itself.
+  ensureBuiltIn(label: string, title: string, nowMs: number): SoundRecord {
+    const existing = this.findByLabel(label);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const record: SoundRecord = {
+      id: this.nextId(), label: label, name: title, alertsEnabled: true, timesHeard: 0, firstSeenMs: nowMs,
+      lastSeenMs: nowMs, lastAlertMs: 0, lastPromptMs: 0, promptNever: false, recentMs: [], profile: emptyProfile(),
+      template: ''
+    };
+    this.items.push(record);
+    return record;
   }
 
   // A sound the engine just detected for the first time. Its template arrives a few seconds later.
