@@ -1,9 +1,13 @@
 # Safe'n'Sound
 
 A HarmonyOS phone app for deaf and hard-of-hearing people. The phone listens to its surroundings, detects
-signal sounds (beeps, buzzers, alarms, chimes), remembers them, lets you name them, and alerts you with
-vibration and a notification when a named sound is heard again. Everything runs on the device: no cloud,
+signal sounds (beeps, buzzers, alarms, chimes, sirens, a baby crying, knocks, loud sounds), remembers them, lets you
+name them, alerts you with vibration and a notification, and turns speech into live captions that react to words
+such as "help" and "watch out". It keeps listening in the background. Everything runs on the device: no cloud,
 no stored audio. Only compact sound fingerprints (feature numbers) are saved.
+
+Documentation: [technical overview](docs/TECHNICAL_OVERVIEW.md) (technology, libraries, the physics and the
+processing behind every function) and [user guide](docs/USER_GUIDE.md) (step-by-step workflows).
 
 Core loop: **detect -> remember -> recognise repeat -> offer to name -> alert on named sound.**
 The app never relies on audio feedback: every state is visible on screen and every alert vibrates.
@@ -24,32 +28,45 @@ The app never relies on audio feedback: every state is visible on screen and eve
   short vibration.
 - **History / My sounds:** every sound with count, last time and a small pattern chart; details in plain
   words (for example "High-pitched, 3 beeps per second, about 2.1 s long"), rename, alert switch, delete.
-- Data survives restarts. Room hum and the phone's own vibration are not detected as sounds.
+- **Built-in sound classes:** siren, scream, baby crying, short beep or chirp, knock and loud sound are detected
+  without teaching, appear in History, alert with their own vibration pattern and notification, and can be switched
+  off one by one in Settings. Knocks and loud sounds ignore the phone's own vibration and the taps on its screen.
+- **Captions and keywords:** the system speech recogniser (on the device) feeds live captions; keywords such as
+  "help" and "watch out" (also in Chinese) are highlighted and trigger their own vibration and notification. Words
+  and vibration patterns can be added and removed; a typed-text input (marked as a simulation) feeds the same engine.
+- **Background listening:** with the screen off or the app in the background the microphone keeps running as a
+  system "recording task" and alerts keep arriving as notifications.
+- **Settings:** which classes alert, vibration, notifications, background listening, start on open, speech.
+- Data survives restarts. Room hum and the phone's own noise are not detected as sounds.
 
 ## Platform features used
 
 Audio capture (`AudioCapturer`, 16 kHz mono) with a runtime microphone permission and privacy text,
 vibrator, notifications (`notificationManager`), local storage (`Preferences`), NAPI (ArkTS <-> C++),
-`@kit.AbilityKit` lifecycle (listening stops when the app leaves the foreground).
+`@kit.AbilityKit` lifecycle, background continuous task (`backgroundTaskManager`, `AUDIO_RECORDING`) with the
+`KEEP_BACKGROUND_RUNNING` permission, and the Core Speech Kit recogniser (`speechRecognizer`, on-device).
 
 ## Architecture
 
 ```
 AudioCapturer (ArkTS) --PCM--> NAPI (libsafensound.so) --> SoundEngine (C++)
-                                  ambient::Detector (alarm + learned/taught sounds), ring buffer,
-                                  16-band live spectrum, SoundProfile, learn/train
+                                  ambient::Detector (alarm, chirp, siren, scream, cry, knock, loud sound,
+                                  learned/taught sounds), ring buffer, 16-band live spectrum, SoundProfile, learn/train
 ArkTS: SoundPipeline -> SoundCatalog (occurrences, naming, cooldown, prompt rules) -> SoundStore (Preferences)
-       AlertService (vibrator, notifications)        UI: Listen / History / My sounds, dialogs
+       AlertService (vibrator, notifications, background task)
+       PCM -> SystemRecognizer (Core Speech Kit) -> native keyword rules -> CaptionBoard -> Captions tab, alerts
+       UI: Listen / History / Captions / My sounds / Settings, dialogs
 ```
 
-- `entry/src/main/cpp/ambient` - the team's sound engine (prior code, see below): FFT, alarm detector,
-  custom-sound spectrogram templates, trainer.
+- `entry/src/main/cpp/ambient` - the team's sound engine (prior code, see below): FFT, detectors, custom-sound
+  spectrogram templates, trainer, keyword (speech) rules.
 - `entry/src/main/cpp/wrapper` - `SoundEngine`: ring buffer (last 10 s, memory only), live spectrum, learning
   from a detected sound, teaching from takes, restoring stored sounds.
 - `entry/src/main/cpp/profile` - FFT frame analysis and `SoundProfile` (pitch, duration, repetition, modulation,
   envelope) used for the plain-words description.
 - `entry/src/main/cpp/napi` - thin NAPI bridge; typings in `entry/src/main/cpp/types/libsafensound`.
-- `entry/src/main/ets` - `model/` (pure logic), `services/` (audio, pipeline, alerts, storage), `components/`, `pages/`.
+- `entry/src/main/ets` - `model/` (pure logic: catalog, classes, settings, self-noise guard, caption text),
+  `services/` (audio, pipeline, alerts, storage, speech), `components/`, `pages/`.
 - Data flow: an `alarm` event is held for 3.7 s; if a stored sound explains it (a `custom` event) it is counted,
   otherwise a new unknown sound is created and its template learned from the ring buffer. Only templates and
   profile numbers are stored (as base64 in Preferences JSON); raw audio never leaves memory.
@@ -181,17 +198,25 @@ A longer second video (4 min, same phone) adds **Teach a sound**: two complex so
 
 ## Known limitations
 
-- Listening stops when the app goes to the background or the screen locks (foreground only).
+- Background listening is a system recording task and depends on the phone: it was verified with the screen off and the
+  app in the background on the test phone; some phones also need the app excluded from battery optimisation.
+- The speech recogniser is Mandarin-based (the only language the platform offers on the device: queried on the test
+  phone). English words such as "watch out" usually come back as English text and the English keywords work, but
+  a single word such as "help" is recognised less reliably than a phrase; captions can show Chinese characters. The
+  recogniser only runs while the app is on screen (it disturbs the microphone in the background).
+- Scream and baby-crying detection are heuristics of the engine, tuned on synthetic audio. Through a laptop speaker
+  a baby's cry (fundamental about 400 Hz) and a synthetic scream were not reproduced well enough to be detected
+  there (the engine's own cry and scream test signals are detected when read from file); knock detection could not be
+  exercised with a speaker.
 - Detection thresholds come from the team's engine; the similarity needed to recognise a learned sound again is 0.6
   (the engine default 0.8 missed quieter real repeats), tuned on recordings of one alarm sound in one noisy room; sounds shorter than 0.4 s,
   very quiet sounds, and sounds outside 800-4500 Hz are not detected automatically (Teach covers them).
 - Complex multi-note sounds are detected and can be taught, but in a noisy room two takes occasionally disagree
   (4 of 50 pairs in the recordings above); a third take lets the app leave the odd one out. One of 25 plays of an
   irregular pattern was not recognised afterwards.
-- Knocks and loud sounds are not reported (the phone's own vibration would be classed as one).
-- Keyword detection ("Help!", "Watch out!", "Ratunku!") is roadmap only; the engine contains keyword logic
-  but no speech recogniser is bundled.
-- English UI only. Lint reports 5 style warnings (prefer `@Builder` over small components).
+- Knocks and loud sounds are level-only detections: they are ignored while the phone vibrates and for a moment after a
+  tap on its screen, but a real loud noise nearby will be reported (switch them off in Settings if it is too much).
+- English UI only. Lint reports 7 style warnings (prefer `@Builder` over small components) and no errors.
 
 ## License
 
@@ -199,9 +224,11 @@ There is deliberately no license file: this is the team's own work, all rights r
 
 ## Prior code and AI use
 
-- `entry/src/main/cpp/ambient` is the sound engine written by a member of the team for this hackathon
-  (https://github.com/Xp4blos/hack-yeah-2026, commit `512e41d`), included without `speech.*`. See
-  `entry/src/main/cpp/ambient/README.md`.
+- `entry/src/main/cpp/ambient` is the sound engine written by members of the team for this hackathon. It was first
+  taken from https://github.com/Xp4blos/hack-yeah-2026 (commit `512e41d`) and, in the merge with the team's second
+  concept (https://github.com/INawrot/Ambient, `AmbientApp`), replaced by that repository's newer engine (adds chirp,
+  cry, siren, scream, speech keywords and false-alarm control) with small additions of ours (strict teaching options,
+  see `entry/src/main/cpp/ambient/CHANGES.md`). The app icon comes from the same concept repository.
 - No third-party open-source code is bundled besides the HarmonyOS SDK, hypium/hamock test libraries (installed
   by `ohpm`) and the DevEco toolchain.
 - AI assistants were used throughout; see `AI_WORKFLOW.md` for tools, prompts, validation and the bugs found
